@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../models/models.dart';
-import '../state/app_state.dart';
-import '../theme/app_theme.dart';
-import '../widgets/common.dart';
+import '../../core/models/models.dart';
+import '../../core/state/app_state.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/common.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, required this.state});
@@ -49,7 +49,7 @@ class _FlowBanner extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Programação → Lote único → Cotação → Aprovação → Faturação + Entrega → Armazém → JIT → Consumo → Matching de rutura → Taxa',
+            'Programação → Lote → Cotação → Aprovação → Faturação → Liquidação → Trânsito → Armazém → JIT → Consumo → Rutura → Empréstimo → OC-REP → Taxa',
             style: GoogleFonts.manrope(
               color: Colors.white,
               fontWeight: FontWeight.w600,
@@ -64,8 +64,10 @@ class _FlowBanner extends StatelessWidget {
               FlowStepChip(index: 1, label: 'Necessidades', active: true),
               FlowStepChip(index: 2, label: 'Consolidação'),
               FlowStepChip(index: 3, label: 'Fornecedor'),
-              FlowStepChip(index: 4, label: 'Armazém JIT'),
-              FlowStepChip(index: 5, label: 'Empréstimo'),
+              FlowStepChip(index: 4, label: 'Liquidação'),
+              FlowStepChip(index: 5, label: 'Armazém JIT'),
+              FlowStepChip(index: 6, label: 'Empréstimo'),
+              FlowStepChip(index: 7, label: 'Taxa'),
             ],
           ),
         ],
@@ -144,7 +146,7 @@ class _ProducerDashboard extends StatelessWidget {
         SectionHeader(
           title: 'Painel do produtor',
           subtitle:
-              '${p.farm} · ${p.groupName} · ${p.productionType.label} · Porte ${p.productionSize.label} · ${p.hectares.toStringAsFixed(0)} ha',
+              '${p.farm} · ${p.groupName} · ${p.focus} · Porte ${p.productionSize.label} · ${p.hectares.toStringAsFixed(0)} ha · ${p.cadproCode}',
         ),
         const SizedBox(height: 16),
         _FlowBanner(),
@@ -220,6 +222,8 @@ class _AdminDashboard extends StatelessWidget {
         const SizedBox(height: 16),
         _FlowBanner(),
         const SizedBox(height: 16),
+        _DemoScenariosPanel(state: state),
+        const SizedBox(height: 16),
         _metricsRow([
           MetricCard(
             label: 'Utilizadores demo',
@@ -232,7 +236,7 @@ class _AdminDashboard extends StatelessWidget {
             label: 'Clientes',
             value: '${state.producers.length}',
             icon: Icons.people_outline,
-            subtitle: 'Soja / Leite / Carne',
+            subtitle: 'Multi-produção por fazenda',
             accent: AppColors.info,
           ),
           MetricCard(
@@ -277,13 +281,15 @@ class _ManagerDashboard extends StatelessWidget {
         const SizedBox(height: 16),
         _FlowBanner(),
         const SizedBox(height: 16),
+        _DemoScenariosPanel(state: state),
+        const SizedBox(height: 16),
         _metricsRow([
           MetricCard(
             label: 'Clientes',
             value: '${state.producers.length}',
             icon: Icons.people_outline,
             subtitle:
-                'Soja / Leite / Carne · classificados por porte e ha',
+                'CADPRO · multi-foco (ha por tipo)',
             accent: AppColors.info,
           ),
           MetricCard(
@@ -421,3 +427,77 @@ class _CarrierDashboard extends StatelessWidget {
     );
   }
 }
+
+class _DemoScenariosPanel extends StatelessWidget {
+  const _DemoScenariosPanel({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cenários mock (UML)',
+            style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Executa sequências prontas para demonstrar as fases: liquidação, reposição e taxa.',
+            style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(height: 14),
+          ...DemoScenarioId.values.map((id) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          id.title,
+                          style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          id.description,
+                          style: GoogleFonts.manrope(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: () {
+                      final msg = state.runDemoScenario(id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(msg)),
+                      );
+                    },
+                    child: const Text('Correr'),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+

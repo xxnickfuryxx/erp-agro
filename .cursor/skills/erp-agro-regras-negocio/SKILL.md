@@ -19,13 +19,16 @@ Aplicar estas regras em qualquer feature, mock ou validação de fluxo. Para vis
 | **Compra Planeada (Lote Único)** | Recolher programação anual/sazonal → consolidar volume → negociar com fornecedor |
 | **Compra Direta (JIT)** | Necessidade imediata → produtor ignora consolidação → pedido direto ao fornecedor |
 
-**Separação de responsabilidades:** fluxo financeiro é **fornecedor ↔ produtor**. O ERP gere apenas a operação **lógica e física** (pedidos, stock, entregas) — não intermedia pagamento.
+**Pipeline planeada (UML):** programação → consolidação → cotação → aprovação → faturação → **liquidação** → trânsito → armazém → JIT.
+
+**Separação de responsabilidades:** o pagamento real é **fornecedor ↔ produtor**. O ERP **regista** faturação e liquidação para visibilidade operacional — não intermedia o dinheiro.
 
 ### Checklist de implementação
 
-- [ ] UI distingue claramente Planeada vs Direta
-- [ ] Consolidação só entra no fluxo Planeada
-- [ ] Mock/API não mistura faturação ERP com faturação fornecedor
+- [x] UI distingue claramente Planeada vs Direta
+- [x] Consolidação só entra no fluxo Planeada (qualquer produto com necessidades)
+- [x] Mock regista liquidação sem misturar com pagamento real
+- [x] Despacho (`emTransito`) separado da receção no armazém
 
 ## 2. Rede de Transferência e Empréstimos Laterais
 
@@ -36,13 +39,15 @@ Fluxo obrigatório:
 3. **Validação de grupo:** A e B no **mesmo grupo operativo** — senão, bloquear transferência.
 4. Autorizar transferência física A → B.
 5. **Frete** faturado ao solicitante (**Produtor B**).
-6. Gerar **ordem de compra vinculativa** para B repor o stock original de A.
+6. Gerar **ordem de compra vinculativa (OC-REP)** + **compra direta de reposição** para B comprar e repor o stock de A.
+7. Ao entregar a compra de reposição, o stock entra no **doador A** (não em B).
 
 ### Invariantes
 
 - Sem mesmo grupo → sem transferência.
 - Frete nunca fica a cargo do doador (A) neste fluxo.
 - Empréstimo implica compromisso de reposição (não é doação).
+- `ReplenishmentOrder` + `DirectPurchase.isReplenishment` ligam os passos 15→16 do UML.
 
 ## 3. Orquestração Logística Terceirizada
 
@@ -52,33 +57,76 @@ Fluxo obrigatório:
 
 ### Checklist
 
-- [ ] Distinguir frete de entrega consolidada vs frete de empréstimo lateral
-- [ ] Modelar transportadora como entidade de domínio (já no mock da v0.0.1)
+- [x] Distinguir frete de entrega consolidada vs frete de empréstimo lateral
+- [x] Modelar transportadora como entidade de domínio
 
-## 4. Categorização Estruturada
+## 4. CADPRO e Categorização Estruturada
 
-Produtores classificados por:
+### CADPRO — Cadastro do Produtor Rural
 
-- **Área de exploração** (hectares)
-- **Foco produtivo** (ex.: Soja, Leite, Pecuária de Corte)
-- **Volume** (escalão de produção)
+Registo obrigatório no módulo `lib/modules/producer/`:
 
-**Taxa de gestão:** 33 kg de soja por hectare anual administrado; suportar safra única ou múltipla.
+- **Nº Identificador CADPRO** (campo editável; único)
+- Identificação: nome, fazenda, CPF/CNPJ, CAR, município/UF, contactos
+- Status: pendente | ativo | inativo
+- Associação a **grupo operativo**
+
+### Tipos de produção dinâmicos
+
+Catálogo `ProductionTypeDef` (não enum fixo):
+
+- Aba **Tipos** no CADPRO → listar / adicionar / ativar-desativar
+- No formulário do produtor: linhas dinâmicas (**Adicionar tipo** + dropdown + ha)
+- `ProductionArea` referencia `typeId` + `typeName` + hectares
+- Soma das reservas **≤ área total** da fazenda
+
+Métodos: `registerProductionType`, `registerClient(cadproCode:)`, `updateProductionAreas`.
+
+### Taxa de gestão
+
+33 kg de soja × hectare total administrado × multiplicador de safra (`unica`=1, `multipla`=2).  
+Cobrança: `chargeManagementFee` / `chargeAllManagementFees` + histórico `FeeCharge`.
 
 ## Domínio mínimo (mock / modelos)
 
-Entidades esperadas no MVP:
-
-- Produtor (ha, foco, volume, grupo operativo, stock)
-- Insumo (tipo, quantidade, unidade)
+- **Producer / CADPRO** (nº identificador, documento, CAR, áreas)
+- **ProductionTypeDef** (catálogo dinâmico)
+- **ProductionArea** (typeId + ha)
+- Insumo / CatalogProduct
 - Grupo operativo
-- Transportadora / frete
-- Pedido (planeado | direto)
-- Transferência / empréstimo (origem, destino, frete, ordem de reposição)
+- Pedidos, lotes, transferências, OC-REP, liquidação, FeeCharge
+
+## Arquitetura modular
+
+| Module | Path |
+|--------|------|
+| Auth | `lib/modules/auth/` |
+| Shell / Dashboard | `lib/modules/shell/` |
+| Producer (CADPRO) | `lib/modules/producer/` |
+| Purchases | `lib/modules/purchases/` |
+| Logistics | `lib/modules/logistics/` |
+| Network (loans) | `lib/modules/network/` |
+| Stock | `lib/modules/stock/` |
+| Fees | `lib/modules/fees/` |
+| Shared core | `lib/core/` |
+
+## Cenários mock (`DemoScenarioId`)
+
+| ID | O que demonstra |
+|----|-----------------|
+| `compraPlaneadaCompleta` | Lote → cotação → aprovação → fatura → liquidação → armazém |
+| `ruturaEmprestimoReposicao` | Rutura B → matching → OC-REP entregue a A |
+| `liquidacaoFinanceira` | Liquidação de lote pendente |
+| `taxaGestao` | Cobrança 33 kg/ha (safra múltipla em A) |
+
+Correr via `AppState.runDemoScenario` (UI no painel Admin/Gestora).
 
 ## Ao simular na v0.0.1
 
 Priorizar UX que demonstre:
 
-1. Escolha Compra Direta vs Planeada
-2. Transferência com matching + frete ao solicitante + reposição
+1. CADPRO com Nº Identificador + tipos dinâmicos e ha por tipo
+2. Escolha Compra Direta vs Planeada
+3. Liquidação financeira registada
+4. Transferência com matching + frete + reposição ao doador
+5. Cobrança efetiva da taxa de gestão

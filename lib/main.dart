@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'screens/app_shell.dart';
-import 'screens/login_screen.dart';
-import 'state/app_state.dart';
-import 'theme/app_theme.dart';
+import 'core/state/app_state.dart';
+import 'core/theme/app_theme.dart';
+import 'modules/auth/login_screen.dart';
+import 'modules/shell/app_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

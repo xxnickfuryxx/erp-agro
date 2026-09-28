@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import '../models/models.dart';
-import '../state/app_state.dart';
-import '../theme/app_theme.dart';
-import '../widgets/common.dart';
+import '../../core/models/models.dart';
+import '../../core/state/app_state.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/common.dart';
 
 class PurchasesScreen extends StatelessWidget {
   const PurchasesScreen({super.key, required this.state});
@@ -75,26 +75,55 @@ class PurchasesScreen extends StatelessWidget {
         if (role.canManageEcosystem) ...[
           Align(
             alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                final lot = state.consolidatePlanned('ins-semente');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      lot == null
-                          ? 'Sem necessidades planeadas de semente para consolidar.'
-                          : 'Lote ${lot.code} consolidado.',
-                    ),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.merge_type),
-              label: const Text('Consolidar sementes (demo)'),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () {
+                    final lot = state.consolidateNextPlanned();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          lot == null
+                              ? 'Sem necessidades planeadas para consolidar.'
+                              : 'Lote ${lot.code} consolidado (${lot.productName}).',
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.merge_type),
+                  label: const Text('Consolidar próximo produto'),
+                ),
+                ...state.plannedProductIdsWithNeeds().map((pid) {
+                  final name =
+                      state.productById(pid)?.name ?? pid;
+                  return OutlinedButton(
+                    onPressed: () {
+                      final lot = state.consolidatePlanned(pid);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            lot == null
+                                ? 'Sem linhas para $name.'
+                                : 'Lote ${lot.code} consolidado.',
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text('Consolidar $name'),
+                  );
+                }),
+              ],
             ),
           ),
           const SizedBox(height: 16),
         ],
         _LotsPanel(state: state),
+        if (role.canManageEcosystem || role.canActAsSupplier) ...[
+          const SizedBox(height: 20),
+          _SettlementsPanel(state: state),
+        ],
       ],
     );
   }
@@ -456,12 +485,20 @@ class _DirectOrdersPanel extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       '$farm · ${o.quantity.toStringAsFixed(0)} ${o.unit} · ${o.supplierName}'
-                      '${o.carrierName != null ? ' · Frete: ${o.carrierName}' : ''}',
+                      '${o.carrierName != null ? ' · Frete: ${o.carrierName}' : ''}'
+                      '${o.isReplenishment ? ' · REPOSIÇÃO → ${state.producerById(o.stockDestinationProducerId ?? '')?.farm ?? 'doador'}' : ''}',
                       style: GoogleFonts.manrope(
                         fontSize: 12,
                         color: AppColors.muted,
                       ),
                     ),
+                    if (o.isReplenishment) ...[
+                      const SizedBox(height: 6),
+                      StatusPill(
+                        label: 'OC ${o.replenishmentOrderId ?? '—'}',
+                        tone: PillTone.gold,
+                      ),
+                    ],
                     if (role.canActAsSupplier &&
                         o.status == DirectOrderStatus.enviado) ...[
                       const SizedBox(height: 10),
@@ -474,7 +511,11 @@ class _DirectOrdersPanel extends StatelessWidget {
                           ),
                           FilledButton(
                             onPressed: () => state.deliverDirectPurchase(o.id),
-                            child: const Text('Marcar entregue'),
+                            child: Text(
+                              o.isReplenishment
+                                  ? 'Entregar ao doador'
+                                  : 'Marcar entregue',
+                            ),
                           ),
                         ],
                       ),
@@ -484,7 +525,11 @@ class _DirectOrdersPanel extends StatelessWidget {
                       const SizedBox(height: 10),
                       FilledButton(
                         onPressed: () => state.deliverDirectPurchase(o.id),
-                        child: const Text('Marcar entregue'),
+                        child: Text(
+                          o.isReplenishment
+                              ? 'Entregar ao doador'
+                              : 'Marcar entregue',
+                        ),
                       ),
                     ],
                   ],
@@ -503,12 +548,51 @@ class _LotsPanel extends StatelessWidget {
   final AppState state;
 
   PillTone _tone(LotStatus s) => switch (s) {
-        LotStatus.concluido => PillTone.success,
+        LotStatus.concluido || LotStatus.liquidado => PillTone.success,
         LotStatus.cotacao || LotStatus.consolidado => PillTone.warning,
         LotStatus.aprovado || LotStatus.faturado => PillTone.info,
+        LotStatus.emTransito => PillTone.warning,
         LotStatus.noArmazem || LotStatus.emDistribuicao => PillTone.gold,
         _ => PillTone.neutral,
       };
+
+  Future<void> _quoteDialog(BuildContext context, PurchaseLot lot) async {
+    final ctrl = TextEditingController(
+      text: (lot.quotedPricePerUnit ?? 490).toStringAsFixed(2),
+    );
+    final price = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Cotação — ${lot.code}',
+          style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+        ),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Preço por ${lot.unit} (R\$)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(ctrl.text.replaceAll(',', '.'));
+              Navigator.pop(ctx, v);
+            },
+            child: const Text('Registar'),
+          ),
+        ],
+      ),
+    );
+    if (price != null && price > 0) {
+      state.quoteLot(lot.id, price);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -561,7 +645,8 @@ class _LotsPanel extends StatelessWidget {
                       'Volume: ${lot.totalQuantity.toStringAsFixed(0)} ${lot.unit} · '
                       '${lot.participantIds.length} produtores · '
                       '${lot.supplierName ?? '—'}'
-                      '${lot.quotedPricePerUnit != null ? ' · ${money.format(lot.quotedPricePerUnit)} / ${lot.unit}' : ''}',
+                      '${lot.quotedPricePerUnit != null ? ' · ${money.format(lot.quotedPricePerUnit)} / ${lot.unit}' : ''}'
+                      '${lot.settled ? ' · Liquidado' : ''}',
                       style: GoogleFonts.manrope(
                         fontSize: 12,
                         color: AppColors.muted,
@@ -576,7 +661,7 @@ class _LotsPanel extends StatelessWidget {
                             (lot.status == LotStatus.consolidado ||
                                 lot.status == LotStatus.programacao))
                           OutlinedButton(
-                            onPressed: () => state.quoteLot(lot.id, 490),
+                            onPressed: () => _quoteDialog(context, lot),
                             child: const Text('Efetuar cotação'),
                           ),
                         if (role.canActAsSupplier &&
@@ -585,32 +670,115 @@ class _LotsPanel extends StatelessWidget {
                             onPressed: () => state.approveLot(lot.id),
                             child: const Text('Aprovar venda'),
                           ),
-                        if (role.canActAsSupplier &&
-                            lot.status == LotStatus.aprovado) ...[
+                        if ((role.canActAsSupplier || role.canManageEcosystem) &&
+                            lot.status == LotStatus.aprovado)
                           OutlinedButton(
                             onPressed: () => state.issueInvoice(lot.id),
                             child: const Text('Emitir faturação direta'),
                           ),
+                        if ((role.canActAsSupplier || role.canManageEcosystem) &&
+                            (lot.status == LotStatus.faturado ||
+                                lot.status == LotStatus.aprovado) &&
+                            !lot.settled)
                           FilledButton(
-                            onPressed: () => state.deliverToWarehouse(lot.id),
-                            child: const Text('Entregar volume ao armazém'),
+                            onPressed: () {
+                              final s = state.settleLotFinancial(lot.id);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    s == null
+                                        ? 'Não foi possível liquidar.'
+                                        : 'Liquidado: ${money.format(s.totalAmount)}',
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Text('Liquidar financeiramente'),
                           ),
-                        ],
-                        if (role.canActAsSupplier &&
-                            lot.status == LotStatus.faturado)
-                          FilledButton(
-                            onPressed: () => state.deliverToWarehouse(lot.id),
-                            child: const Text('Entregar volume ao armazém'),
+                        if ((role.canActAsSupplier || role.canManageEcosystem) &&
+                            (lot.status == LotStatus.faturado ||
+                                lot.status == LotStatus.liquidado))
+                          OutlinedButton(
+                            onPressed: () =>
+                                state.dispatchLotToWarehouse(lot.id),
+                            child: const Text('Despachar (em trânsito)'),
                           ),
                         if (role.canManageEcosystem &&
-                            lot.status == LotStatus.aprovado)
+                            lot.status == LotStatus.emTransito)
+                          FilledButton(
+                            onPressed: () =>
+                                state.receiveLotAtWarehouse(lot.id),
+                            child: const Text('Rececionar no armazém'),
+                          ),
+                        if (role.canManageEcosystem &&
+                            (lot.status == LotStatus.aprovado ||
+                                lot.status == LotStatus.faturado ||
+                                lot.status == LotStatus.liquidado))
                           OutlinedButton(
                             onPressed: () => state.deliverToWarehouse(lot.id),
-                            child: const Text('Rececionar no armazém'),
+                            child: const Text('Atalho: receber no armazém'),
                           ),
                       ],
                     ),
                   ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _SettlementsPanel extends StatelessWidget {
+  const _SettlementsPanel({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final money = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Liquidações financeiras (fornecedor ↔ produtores)',
+          style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'O ERP apenas regista a liquidação — o pagamento ocorre fora da plataforma.',
+          style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 10),
+        if (state.settlements.isEmpty)
+          const EmptyHint(message: 'Nenhuma liquidação registada.')
+        else
+          ...state.settlements.map((s) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                tileColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: AppColors.line),
+                ),
+                leading: const Icon(Icons.account_balance_wallet_outlined,
+                    color: AppColors.forest),
+                title: Text(
+                  s.lotCode,
+                  style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  '${s.participantIds.length} produtores · ${s.notes}',
+                  style: GoogleFonts.manrope(fontSize: 12),
+                ),
+                trailing: Text(
+                  money.format(s.totalAmount),
+                  style: GoogleFonts.manrope(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.forest,
+                  ),
                 ),
               ),
             );

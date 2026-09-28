@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../models/models.dart';
-import '../state/app_state.dart';
-import '../theme/app_theme.dart';
-import '../widgets/common.dart';
+import '../../core/models/models.dart';
+import '../../core/state/app_state.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/common.dart';
 
 class LogisticsScreen extends StatelessWidget {
   const LogisticsScreen({super.key, required this.state});

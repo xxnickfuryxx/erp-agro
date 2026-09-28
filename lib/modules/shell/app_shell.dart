@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../models/models.dart';
-import '../state/app_state.dart';
-import '../theme/app_theme.dart';
+import '../../core/models/models.dart';
+import '../../core/state/app_state.dart';
+import '../../core/theme/app_theme.dart';
 import 'dashboard_screen.dart';
-import 'fees_screen.dart';
-import 'clients_screen.dart';
-import 'logistics_screen.dart';
-import 'purchases_screen.dart';
-import 'stock_screen.dart';
-import 'transfers_screen.dart';
+import '../fees/fees_screen.dart';
+import '../producer/producer_screen.dart';
+import '../logistics/logistics_screen.dart';
+import '../purchases/purchases_screen.dart';
+import '../stock/stock_screen.dart';
+import '../network/transfers_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.state});
@@ -41,7 +41,7 @@ class _AppShellState extends State<AppShell> {
     if (role.isAdmin) {
       return [
         ...common,
-        _NavItem('Cadastros', Icons.people_outline, (s) => ClientsScreen(state: s)),
+        _NavItem('CADPRO', Icons.badge_outlined, (s) => ProducerScreen(state: s)),
         _NavItem('Compras', Icons.shopping_bag_outlined, (s) => PurchasesScreen(state: s)),
         _NavItem('Logística', Icons.local_shipping_outlined, (s) => LogisticsScreen(state: s)),
         _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),
@@ -64,7 +64,7 @@ class _AppShellState extends State<AppShell> {
       case UserRole.gestora:
         return [
           ...common,
-          _NavItem('Cadastros', Icons.people_outline, (s) => ClientsScreen(state: s)),
+          _NavItem('CADPRO', Icons.badge_outlined, (s) => ProducerScreen(state: s)),
           _NavItem('Lotes', Icons.layers_outlined, (s) => PurchasesScreen(state: s)),
           _NavItem('Logística', Icons.local_shipping_outlined, (s) => LogisticsScreen(state: s)),
           _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),

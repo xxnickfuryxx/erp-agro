@@ -27,46 +27,107 @@ class MockData {
         ),
       ];
 
+  static List<ProductionTypeDef> initialProductionTypes() => [
+        ProductionTypeDef(
+          id: 'pt-soja',
+          name: 'Produção de Soja',
+          shortLabel: 'Soja',
+        ),
+        ProductionTypeDef(
+          id: 'pt-leite',
+          name: 'Produção de Leite',
+          shortLabel: 'Leite',
+        ),
+        ProductionTypeDef(
+          id: 'pt-carne',
+          name: 'Produção de Carne',
+          shortLabel: 'Carne',
+        ),
+      ];
+
   static List<Producer> initialProducers() => [
         Producer(
           id: 'p-a',
           name: 'Carlos Mendes',
           farm: 'Fazenda Horizonte',
           hectares: 1200,
-          productionType: ProductionType.soja,
+          productionAreas: [
+            ProductionArea(typeId: 'pt-soja', typeName: 'Soja', hectares: 900, harvestMode: HarvestMode.multipla),
+            ProductionArea(typeId: 'pt-leite', typeName: 'Leite', hectares: 200),
+            ProductionArea(typeId: 'pt-carne', typeName: 'Carne', hectares: 100),
+          ],
           productionSize: ProductionSize.grande,
           groupId: 'g1',
           groupName: 'Grupo Cerrado Norte',
+          cadproCode: 'CADPRO-2024-0142',
+          document: '12.345.678/0001-90',
+          car: 'MT-5100000-ABCDEF123456',
+          municipality: 'Sorriso',
+          stateUf: 'MT',
+          phone: '(66) 99911-2200',
+          email: 'carlos@horizonte.agro',
+          harvestMode: HarvestMode.multipla,
         ),
         Producer(
           id: 'p-b',
           name: 'Ana Ribeiro',
           farm: 'Sítio Boa Vista',
           hectares: 480,
-          productionType: ProductionType.soja,
+          productionAreas: [
+            ProductionArea(typeId: 'pt-soja', typeName: 'Soja', hectares: 400),
+            ProductionArea(typeId: 'pt-leite', typeName: 'Leite', hectares: 80),
+          ],
           productionSize: ProductionSize.medio,
           groupId: 'g1',
           groupName: 'Grupo Cerrado Norte',
+          cadproCode: 'CADPRO-2025-0088',
+          document: '987.654.321-00',
+          car: 'MT-5102500-XYZ987654321',
+          municipality: 'Lucas do Rio Verde',
+          stateUf: 'MT',
+          phone: '(66) 98822-1100',
+          email: 'ana@boavista.agro',
         ),
         Producer(
           id: 'p-c',
           name: 'Pedro Almeida',
           farm: 'Estância Vale Verde',
           hectares: 850,
-          productionType: ProductionType.carne,
-          productionSize: ProductionSize.medio,
+          productionAreas: [
+            ProductionArea(typeId: 'pt-carne', typeName: 'Carne', hectares: 600),
+            ProductionArea(typeId: 'pt-leite', typeName: 'Leite', hectares: 250),
+          ],
+          productionSize: ProductionSize.grande,
           groupId: 'g2',
           groupName: 'Grupo Pantanal Leste',
+          cadproCode: 'CADPRO-2023-0310',
+          document: '11.222.333/0001-44',
+          car: 'MS-5000000-PANTANAL001',
+          municipality: 'Corumbá',
+          stateUf: 'MS',
+          phone: '(67) 97700-5500',
+          email: 'pedro@valeverde.agro',
         ),
         Producer(
           id: 'p-d',
           name: 'Juliana Souza',
           farm: 'Laticínios Serra Azul',
           hectares: 220,
-          productionType: ProductionType.leite,
+          productionAreas: [
+            ProductionArea(typeId: 'pt-leite', typeName: 'Leite', hectares: 180),
+            ProductionArea(typeId: 'pt-carne', typeName: 'Carne', hectares: 40),
+          ],
           productionSize: ProductionSize.pequeno,
           groupId: 'g1',
           groupName: 'Grupo Cerrado Norte',
+          cadproCode: 'CADPRO-2025-0155',
+          document: '123.456.789-10',
+          car: 'MT-5107000-SERRAAZUL01',
+          municipality: 'Sinop',
+          stateUf: 'MT',
+          phone: '(66) 99100-3344',
+          email: 'juliana@serraazul.agro',
+          harvestMode: HarvestMode.unica,
         ),
       ];
 
@@ -325,6 +386,20 @@ class MockData {
           status: LotStatus.noArmazem,
           quotedPricePerUnit: 3120.0,
           supplierName: 'AgroSupply Multinacional',
+          settled: true,
+          settledAt: DateTime(2026, 3, 12),
+        ),
+        PurchaseLot(
+          id: 'lot3',
+          code: 'LOTE-2026-009',
+          productId: 'ins-diesel',
+          productName: 'Gasóleo / Diesel',
+          totalQuantity: 12000,
+          unit: 'L',
+          participantIds: ['p-a', 'p-b', 'p-d'],
+          status: LotStatus.faturado,
+          quotedPricePerUnit: 5.85,
+          supplierName: 'AgroSupply Multinacional',
         ),
       ];
 
@@ -363,6 +438,88 @@ class MockData {
           status: 'Em rota',
           carrierId: 'c2',
           carrierName: 'AgroFrete Brasil',
+        ),
+      ];
+
+  /// Liquidação já concluída do lote de fertilizante (demo).
+  static List<FinancialSettlement> initialSettlements() => [
+        FinancialSettlement(
+          id: 'fs1',
+          lotId: 'lot2',
+          lotCode: 'LOTE-2026-011',
+          totalAmount: 40 * 3120.0,
+          participantIds: ['p-a'],
+          settledAt: DateTime(2026, 3, 12),
+        ),
+      ];
+
+  /// Taxa já cobrada a Juliana (demo parcial).
+  static List<FeeCharge> initialFeeCharges() => [
+        FeeCharge(
+          id: 'fee1',
+          producerId: 'p-d',
+          season: 'Safra 2025/26',
+          harvestMode: HarvestMode.unica,
+          hectares: 220,
+          kgCharged: 220 * 33,
+          status: FeeChargeStatus.cobrada,
+          chargedAt: DateTime(2026, 2, 1),
+        ),
+      ];
+
+  /// Empréstimo histórico com reposição ainda aberta (demo).
+  static List<TransferLoan> initialTransfers() => [
+        TransferLoan(
+          id: 'tr-demo1',
+          fromProducerId: 'p-a',
+          toProducerId: 'p-d',
+          productId: 'ins-diesel',
+          productName: 'Gasóleo / Diesel',
+          quantity: 400,
+          unit: 'L',
+          freightCost: 350,
+          freightPayerId: 'p-d',
+          sameGroup: true,
+          status: TransferStatus.reposicaoGerada,
+          carrierId: 'c1',
+          carrierName: 'TransCampo Logística',
+          replenishmentOrderId: 'OC-REP-1000',
+          replenishmentPurchaseId: 'dp-rep-demo1',
+        ),
+      ];
+
+  static List<ReplenishmentOrder> initialReplenishments() => [
+        ReplenishmentOrder(
+          id: 'rep1',
+          code: 'OC-REP-1000',
+          transferId: 'tr-demo1',
+          borrowerId: 'p-d',
+          donorId: 'p-a',
+          productId: 'ins-diesel',
+          productName: 'Gasóleo / Diesel',
+          quantity: 400,
+          unit: 'L',
+          status: ReplenishmentStatus.compraEmitida,
+          linkedDirectPurchaseId: 'dp-rep-demo1',
+        ),
+      ];
+
+  static List<DirectPurchase> initialDirectPurchases() => [
+        DirectPurchase(
+          id: 'dp-rep-demo1',
+          code: 'DIR-REP-1000',
+          producerId: 'p-d',
+          productId: 'ins-diesel',
+          productName: 'Gasóleo / Diesel',
+          quantity: 400,
+          unit: 'L',
+          supplierName: 'AgroSupply Multinacional',
+          status: DirectOrderStatus.confirmado,
+          carrierId: 'c1',
+          carrierName: 'TransCampo Logística',
+          isReplenishment: true,
+          replenishmentOrderId: 'OC-REP-1000',
+          stockDestinationProducerId: 'p-a',
         ),
       ];
 }

@@ -7,6 +7,7 @@ class AppState extends ChangeNotifier {
   AppState() {
     _producers = MockData.initialProducers();
     _groups = MockData.initialGroups();
+    _productionTypes = MockData.initialProductionTypes();
     _products = MockData.initialProducts();
     _stock = MockData.initialStock();
     _needs = MockData.initialNeeds();
@@ -14,6 +15,11 @@ class AppState extends ChangeNotifier {
     _warehouse = MockData.initialWarehouse();
     _shipments = MockData.initialShipments();
     _carriers = MockData.initialCarriers();
+    _directPurchases = MockData.initialDirectPurchases();
+    _transfers = MockData.initialTransfers();
+    _replenishments = MockData.initialReplenishments();
+    _settlements = MockData.initialSettlements();
+    _feeCharges = MockData.initialFeeCharges();
   }
 
   DemoUser? currentUser;
@@ -21,6 +27,7 @@ class AppState extends ChangeNotifier {
 
   late List<Producer> _producers;
   late List<FarmerGroup> _groups;
+  late List<ProductionTypeDef> _productionTypes;
   late List<CatalogProduct> _products;
   late List<StockItem> _stock;
   late List<NeedLine> _needs;
@@ -28,20 +35,29 @@ class AppState extends ChangeNotifier {
   late List<WarehouseBatch> _warehouse;
   late List<CarrierShipment> _shipments;
   late List<CarrierCompany> _carriers;
-  final List<DirectPurchase> _directPurchases = [];
-  final List<TransferLoan> _transfers = [];
+  late List<DirectPurchase> _directPurchases;
+  late List<TransferLoan> _transfers;
+  late List<ReplenishmentOrder> _replenishments;
+  late List<FinancialSettlement> _settlements;
+  late List<FeeCharge> _feeCharges;
   final List<ConsumptionLog> _consumptions = [];
   final List<String> _activity = [
     'Sistema iniciado — ambiente de demonstração mock.',
     'Lote LOTE-2026-014 em cotação junto à AgroSupply.',
     'Alerta: stock de diesel do Sítio Boa Vista abaixo do mínimo.',
     'Regra ativa: trocas só entre produtores do mesmo grupo; frete pago por quem pede.',
-    'Cadastros: use o menu Clientes para criar grupos, produtos e novos produtores.',
+    'Cadastros: módulo CADPRO — produtores, tipos de produção, produtos e grupos.',
+    'Demo: OC-REP-1000 pendente (Juliana → repor diesel de Carlos).',
+    'Demo: LOTE-2026-011 liquidado; LOTE-2026-009 aguarda liquidação.',
   ];
 
   List<DemoUser> get users => MockData.users;
   List<Producer> get producers => List.unmodifiable(_producers);
   List<FarmerGroup> get groups => List.unmodifiable(_groups);
+  List<ProductionTypeDef> get productionTypes =>
+      List.unmodifiable(_productionTypes);
+  List<ProductionTypeDef> get activeProductionTypes =>
+      _productionTypes.where((t) => t.active).toList();
   List<CatalogProduct> get products => List.unmodifiable(_products);
   List<ExchangeableProduct> get exchangeableProducts => products;
   List<StockItem> get stock => List.unmodifiable(_stock);
@@ -53,6 +69,11 @@ class AppState extends ChangeNotifier {
   List<DirectPurchase> get directPurchases =>
       List.unmodifiable(_directPurchases);
   List<TransferLoan> get transfers => List.unmodifiable(_transfers);
+  List<ReplenishmentOrder> get replenishments =>
+      List.unmodifiable(_replenishments);
+  List<FinancialSettlement> get settlements =>
+      List.unmodifiable(_settlements);
+  List<FeeCharge> get feeCharges => List.unmodifiable(_feeCharges);
   List<ConsumptionLog> get consumptions => List.unmodifiable(_consumptions);
   List<String> get activity => List.unmodifiable(_activity);
 
@@ -71,6 +92,13 @@ class AppState extends ChangeNotifier {
   FarmerGroup? groupById(String id) {
     for (final g in _groups) {
       if (g.id == id) return g;
+    }
+    return null;
+  }
+
+  ProductionTypeDef? productionTypeById(String id) {
+    for (final t in _productionTypes) {
+      if (t.id == id) return t;
     }
     return null;
   }
@@ -118,6 +146,32 @@ class AppState extends ChangeNotifier {
 
   double managementFeeFor(Producer p) => p.managementFeeKg;
 
+  List<ReplenishmentOrder> get openReplenishments => _replenishments
+      .where((r) => r.status != ReplenishmentStatus.entregueAoDoador)
+      .toList();
+
+  List<PurchaseLot> get lotsAwaitingSettlement => _lots
+      .where((l) =>
+          (l.status == LotStatus.faturado || l.status == LotStatus.aprovado) &&
+          !l.settled)
+      .toList();
+
+  FeeCharge? latestFeeFor(String producerId) {
+    final list = _feeCharges.where((f) => f.producerId == producerId).toList();
+    if (list.isEmpty) return null;
+    return list.first;
+  }
+
+  void setHarvestMode(String producerId, HarvestMode mode) {
+    final p = producerById(producerId);
+    if (p == null) return;
+    p.harvestMode = mode;
+    _pushActivity(
+      '${p.farm}: modo de safra → ${mode.label} (taxa ${p.managementFeeKg.toStringAsFixed(0)} kg).',
+    );
+    notifyListeners();
+  }
+
   // ─── Cadastros (clientes, produtos, grupos) ─────────────────────────
 
   FarmerGroup createGroup({
@@ -135,6 +189,36 @@ class AppState extends ChangeNotifier {
     _pushActivity('Novo grupo criado: ${group.name} (${group.region}).');
     notifyListeners();
     return group;
+  }
+
+  ProductionTypeDef registerProductionType({
+    required String name,
+    required String shortLabel,
+  }) {
+    final short = shortLabel.trim().isEmpty
+        ? name.trim().split(' ').last
+        : shortLabel.trim();
+    final type = ProductionTypeDef(
+      id: 'pt-${DateTime.now().millisecondsSinceEpoch}',
+      name: name.trim().isEmpty ? 'Produção de $short' : name.trim(),
+      shortLabel: short,
+    );
+    _productionTypes.insert(0, type);
+    _pushActivity(
+      'Tipo de produção cadastrado: ${type.shortLabel} (${type.name}).',
+    );
+    notifyListeners();
+    return type;
+  }
+
+  void toggleProductionTypeActive(String typeId) {
+    final type = productionTypeById(typeId);
+    if (type == null) return;
+    type.active = !type.active;
+    _pushActivity(
+      'Tipo ${type.shortLabel} marcado como ${type.active ? 'ativo' : 'inativo'}.',
+    );
+    notifyListeners();
   }
 
   CatalogProduct registerProduct({
@@ -160,28 +244,78 @@ class AppState extends ChangeNotifier {
     required String name,
     required String farm,
     required double hectares,
-    required ProductionType productionType,
-    required ProductionSize productionSize,
+    required List<ProductionArea> productionAreas,
     required String groupId,
+    String? cadproCode,
+    ProductionSize? productionSize,
+    String document = '',
+    String car = '',
+    String municipality = '',
+    String stateUf = '',
+    String phone = '',
+    String email = '',
+    HarvestMode harvestMode = HarvestMode.unica,
   }) {
     final group = groupById(groupId);
     if (group == null) {
-      throw StateError('Grupo não encontrado. Crie um grupo antes do cliente.');
+      throw StateError('Grupo não encontrado. Crie um grupo antes do CADPRO.');
     }
+    if (hectares <= 0) {
+      throw StateError('Área total da fazenda deve ser maior que zero.');
+    }
+    final areas = productionAreas
+        .where((a) => a.hectares > 0 && a.typeId.isNotEmpty)
+        .map(
+          (a) => ProductionArea(
+            typeId: a.typeId,
+            typeName: a.typeName,
+            hectares: a.hectares,
+            harvestMode: a.harvestMode,
+          ),
+        )
+        .toList();
+    if (areas.isEmpty) {
+      throw StateError('Adicione pelo menos um tipo de produção com hectares.');
+    }
+    final allocated = areas.fold<double>(0, (s, a) => s + a.hectares);
+    if (allocated > hectares + 0.001) {
+      throw StateError(
+        'Hectares alocados (${allocated.toStringAsFixed(0)}) excedem a área total (${hectares.toStringAsFixed(0)} ha).',
+      );
+    }
+
+    final rawCode = (cadproCode ?? '').trim();
+    final code = rawCode.isEmpty
+        ? 'CADPRO-${DateTime.now().year}-${(1000 + _producers.length).toString().padLeft(4, '0')}'
+        : rawCode;
+    if (_producers.any((p) => p.cadproCode.toLowerCase() == code.toLowerCase())) {
+      throw StateError('Nº Identificador CADPRO já existe: $code');
+    }
+
+    final size =
+        productionSize ?? ProductionSizeX.fromHectares(hectares);
 
     final producer = Producer(
       id: 'p-${DateTime.now().millisecondsSinceEpoch}',
       name: name.trim(),
       farm: farm.trim(),
       hectares: hectares,
-      productionType: productionType,
-      productionSize: productionSize,
+      productionAreas: areas,
+      productionSize: size,
       groupId: group.id,
       groupName: group.name,
+      cadproCode: code,
+      document: document.trim(),
+      car: car.trim(),
+      municipality: municipality.trim(),
+      stateUf: stateUf.trim().toUpperCase(),
+      phone: phone.trim(),
+      email: email.trim(),
+      cadproStatus: CadproStatus.ativo,
+      harvestMode: harvestMode,
     );
     _producers.insert(0, producer);
 
-    // Stock inicial zerado para cada produto do catálogo (demo).
     for (final product in _products) {
       _stock.add(
         StockItem(
@@ -196,12 +330,54 @@ class AppState extends ChangeNotifier {
     }
 
     _pushActivity(
-      'Cliente cadastrado: ${producer.name} (${producer.farm}) · '
-      '${producer.productionType.shortLabel} · ${producer.hectares.toStringAsFixed(0)} ha · '
+      'CADPRO ${producer.cadproCode}: ${producer.name} (${producer.farm}) · '
+      '${producer.focusDetail} · ${producer.hectares.toStringAsFixed(0)} ha · '
       'Grupo ${group.name}.',
     );
     notifyListeners();
     return producer;
+  }
+
+  /// Atualiza as reservas de hectares por tipo de produção na fazenda.
+  void updateProductionAreas({
+    required String producerId,
+    required List<ProductionArea> productionAreas,
+    double? totalHectares,
+  }) {
+    final producer = producerById(producerId);
+    if (producer == null) return;
+
+    final areas = productionAreas.where((a) => a.hectares > 0).toList();
+    final total = totalHectares ?? producer.hectares;
+    final allocated = areas.fold<double>(0, (s, a) => s + a.hectares);
+    if (areas.isEmpty || allocated > total + 0.001) {
+      _pushActivity(
+        'CADPRO ${producer.cadproCode}: alocação inválida '
+        '(${allocated.toStringAsFixed(0)} / ${total.toStringAsFixed(0)} ha).',
+      );
+      notifyListeners();
+      return;
+    }
+
+    producer.hectares = total;
+    producer.productionAreas
+      ..clear()
+      ..addAll(areas);
+    producer.productionSize = ProductionSizeX.fromHectares(total);
+    _pushActivity(
+      'CADPRO ${producer.cadproCode}: produção atualizada → ${producer.focusDetail}.',
+    );
+    notifyListeners();
+  }
+
+  void updateCadproStatus(String producerId, CadproStatus status) {
+    final producer = producerById(producerId);
+    if (producer == null) return;
+    producer.cadproStatus = status;
+    _pushActivity(
+      'CADPRO ${producer.cadproCode}: status → ${status.label}.',
+    );
+    notifyListeners();
   }
 
   void moveClientToGroup({
@@ -214,7 +390,7 @@ class AppState extends ChangeNotifier {
     producer.groupId = group.id;
     producer.groupName = group.name;
     _pushActivity(
-      '${producer.farm} movido para o grupo ${group.name}.',
+      'CADPRO ${producer.cadproCode}: ${producer.farm} movido para ${group.name}.',
     );
     notifyListeners();
   }
@@ -351,14 +527,45 @@ class AppState extends ChangeNotifier {
     final order = _directPurchases.firstWhere((o) => o.id == orderId);
     order.status = DirectOrderStatus.entregue;
 
-    final stockItem = _stock.firstWhere(
-      (s) => s.producerId == order.producerId && s.productId == order.productId,
+    final destinationId =
+        order.stockDestinationProducerId ?? order.producerId;
+    final stockItem = _ensureStock(
+      producerId: destinationId,
+      productId: order.productId,
+      productName: order.productName,
+      unit: order.unit,
+    );
+    stockItem.quantity += order.quantity;
+
+    if (order.isReplenishment && order.replenishmentOrderId != null) {
+      _completeReplenishment(order.replenishmentOrderId!);
+      _pushActivity(
+        'Reposição ${order.replenishmentOrderId}: '
+        '${order.quantity.toStringAsFixed(0)} ${order.unit} de ${order.productName} '
+        'entregue ao doador ${producerById(destinationId)?.farm}.',
+      );
+    } else {
+      _pushActivity(
+        'Compra direta ${order.code} entregue em ${producerById(order.producerId)?.farm}.',
+      );
+    }
+    notifyListeners();
+  }
+
+  StockItem _ensureStock({
+    required String producerId,
+    required String productId,
+    required String productName,
+    required String unit,
+  }) {
+    return _stock.firstWhere(
+      (s) => s.producerId == producerId && s.productId == productId,
       orElse: () {
         final created = StockItem(
-          producerId: order.producerId,
-          productId: order.productId,
-          productName: order.productName,
-          unit: order.unit,
+          producerId: producerId,
+          productId: productId,
+          productName: productName,
+          unit: unit,
           quantity: 0,
           minThreshold: 1,
         );
@@ -366,13 +573,27 @@ class AppState extends ChangeNotifier {
         return created;
       },
     );
-    stockItem.quantity += order.quantity;
-    _pushActivity(
-      'Compra direta ${order.code} entregue em ${producerById(order.producerId)?.farm}.',
-    );
-    notifyListeners();
   }
 
+  void _completeReplenishment(String replenishmentCodeOrId) {
+    ReplenishmentOrder? order;
+    for (final r in _replenishments) {
+      if (r.id == replenishmentCodeOrId || r.code == replenishmentCodeOrId) {
+        order = r;
+        break;
+      }
+    }
+    if (order == null) return;
+    order.status = ReplenishmentStatus.entregueAoDoador;
+
+    for (final t in _transfers) {
+      if (t.replenishmentOrderId == order.code || t.id == order.transferId) {
+        t.status = TransferStatus.reposicaoConcluida;
+      }
+    }
+  }
+
+  /// Consolida necessidades planeadas de um produto e remove-as do pool.
   PurchaseLot? consolidatePlanned(String productId) {
     final lines = _needs
         .where((n) =>
@@ -396,11 +617,29 @@ class AppState extends ChangeNotifier {
       supplierName: 'AgroSupply Multinacional',
     );
     _lots.insert(0, lot);
+    _needs.removeWhere(
+      (n) => n.productId == productId && n.mode == PurchaseMode.planeada,
+    );
     _pushActivity(
       'ERP consolidou ${lot.code}: $total $unit de $productName (${participants.length} produtores).',
     );
     notifyListeners();
     return lot;
+  }
+
+  /// Consolida o primeiro produto com necessidades planeadas pendentes.
+  PurchaseLot? consolidateNextPlanned() {
+    final pending = _needs.where((n) => n.mode == PurchaseMode.planeada);
+    if (pending.isEmpty) return null;
+    return consolidatePlanned(pending.first.productId);
+  }
+
+  List<String> plannedProductIdsWithNeeds() {
+    return _needs
+        .where((n) => n.mode == PurchaseMode.planeada)
+        .map((n) => n.productId)
+        .toSet()
+        .toList();
   }
 
   void quoteLot(String lotId, double price) {
@@ -424,29 +663,99 @@ class AppState extends ChangeNotifier {
     final lot = _lots.firstWhere((l) => l.id == lotId);
     lot.status = LotStatus.faturado;
     _pushActivity(
-      'Faturação direta emitida aos produtores de ${lot.code} (fora do fluxo financeiro do ERP).',
+      'Faturação direta emitida aos produtores de ${lot.code} (pagamento fora do ERP).',
     );
     notifyListeners();
   }
 
-  void deliverToWarehouse(String lotId) {
+  /// Passo 6 UML: regista liquidação financeira fornecedor ↔ produtores.
+  FinancialSettlement? settleLotFinancial(String lotId) {
     final lot = _lots.firstWhere((l) => l.id == lotId);
-    lot.status = LotStatus.noArmazem;
-    _warehouse.insert(
-      0,
-      WarehouseBatch(
-        id: 'w-${DateTime.now().millisecondsSinceEpoch}',
-        lotId: lot.id,
-        productName: lot.productName,
-        receivedQty: lot.totalQuantity,
-        distributedQty: 0,
-        unit: lot.unit,
-      ),
+    if (lot.quotedPricePerUnit == null) {
+      _pushActivity('Liquidação bloqueada: ${lot.code} sem preço cotado.');
+      notifyListeners();
+      return null;
+    }
+    if (lot.settled) {
+      _pushActivity('${lot.code} já está liquidado.');
+      notifyListeners();
+      return null;
+    }
+
+    final settlement = FinancialSettlement(
+      id: 'fs-${DateTime.now().millisecondsSinceEpoch}',
+      lotId: lot.id,
+      lotCode: lot.code,
+      totalAmount: lot.estimatedTotal,
+      participantIds: List.of(lot.participantIds),
+      settledAt: DateTime.now(),
     );
+    _settlements.insert(0, settlement);
+    lot.settled = true;
+    lot.settledAt = settlement.settledAt;
+    lot.status = LotStatus.liquidado;
+
+    _pushActivity(
+      'Liquidação financeira ${lot.code}: R\$ ${settlement.totalAmount.toStringAsFixed(0)} '
+      '(${lot.participantIds.length} produtores ↔ ${lot.supplierName}).',
+    );
+    notifyListeners();
+    return settlement;
+  }
+
+  /// Despacha volume físico do fornecedor → armazém (em trânsito).
+  void dispatchLotToWarehouse(String lotId) {
+    final lot = _lots.firstWhere((l) => l.id == lotId);
+    if (lot.status != LotStatus.faturado &&
+        lot.status != LotStatus.liquidado &&
+        lot.status != LotStatus.aprovado) {
+      return;
+    }
+    lot.status = LotStatus.emTransito;
+    _pushActivity(
+      'Volume físico de ${lot.code} despachado pelo fornecedor (em trânsito para armazém).',
+    );
+    notifyListeners();
+  }
+
+  /// Receciona carga no armazém de retaguarda.
+  void receiveLotAtWarehouse(String lotId) {
+    final lot = _lots.firstWhere((l) => l.id == lotId);
+    if (lot.status != LotStatus.emTransito &&
+        lot.status != LotStatus.faturado &&
+        lot.status != LotStatus.liquidado &&
+        lot.status != LotStatus.aprovado) {
+      return;
+    }
+
+    final already = _warehouse.any((w) => w.lotId == lot.id);
+    if (!already) {
+      _warehouse.insert(
+        0,
+        WarehouseBatch(
+          id: 'w-${DateTime.now().millisecondsSinceEpoch}',
+          lotId: lot.id,
+          productName: lot.productName,
+          receivedQty: lot.totalQuantity,
+          distributedQty: 0,
+          unit: lot.unit,
+        ),
+      );
+    }
+    lot.status = LotStatus.noArmazem;
     _pushActivity(
       'Armazém de retaguarda rececionou carga total de ${lot.code}.',
     );
     notifyListeners();
+  }
+
+  /// Compat: atalho demo (despacho + receção).
+  void deliverToWarehouse(String lotId) {
+    final lot = _lots.firstWhere((l) => l.id == lotId);
+    if (lot.status != LotStatus.emTransito) {
+      dispatchLotToWarehouse(lotId);
+    }
+    receiveLotAtWarehouse(lotId);
   }
 
   CarrierCompany registerCarrier({
@@ -577,6 +886,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// Troca/empréstimo só no mesmo grupo. Quem pediu paga o frete.
+  /// Gera OC-REP + compra direta vinculativa para B repor stock de A.
   TransferLoan? attemptSmartLoan({
     required String deficitProducerId,
     required String productId,
@@ -595,7 +905,6 @@ class AppState extends ChangeNotifier {
       }
       final donor = producerById(s.producerId);
       if (donor == null) return false;
-      // Regra de negócio: mesmo grupo de fazendeiros.
       if (donor.groupId != deficit.groupId) return false;
       return s.quantity - s.minThreshold >= quantity;
     }).toList()
@@ -642,20 +951,11 @@ class AppState extends ChangeNotifier {
     final donor = producerById(donorStock.producerId)!;
     donorStock.quantity -= quantity;
 
-    final receiver = _stock.firstWhere(
-      (s) => s.producerId == deficitProducerId && s.productId == productId,
-      orElse: () {
-        final created = StockItem(
-          producerId: deficitProducerId,
-          productId: productId,
-          productName: donorStock.productName,
-          unit: donorStock.unit,
-          quantity: 0,
-          minThreshold: 1,
-        );
-        _stock.add(created);
-        return created;
-      },
+    final receiver = _ensureStock(
+      producerId: deficitProducerId,
+      productId: productId,
+      productName: donorStock.productName,
+      unit: donorStock.unit,
     );
     receiver.quantity += quantity;
 
@@ -664,8 +964,45 @@ class AppState extends ChangeNotifier {
         ? carrierById(carrierId)
         : (activeCarriers.isNotEmpty ? activeCarriers.first : null);
 
+    final repCode = 'OC-REP-${1000 + _replenishments.length}';
+    final purchaseId = 'dp-rep-${DateTime.now().millisecondsSinceEpoch}';
+    final transferId = 'tr-${DateTime.now().millisecondsSinceEpoch}';
+
+    final purchase = DirectPurchase(
+      id: purchaseId,
+      code: 'DIR-REP-${1000 + _directPurchases.length}',
+      producerId: deficit.id,
+      productId: productId,
+      productName: donorStock.productName,
+      quantity: quantity,
+      unit: donorStock.unit,
+      supplierName: 'AgroSupply Multinacional',
+      status: DirectOrderStatus.enviado,
+      carrierId: carrier?.id,
+      carrierName: carrier?.name,
+      isReplenishment: true,
+      replenishmentOrderId: repCode,
+      stockDestinationProducerId: donor.id,
+    );
+    _directPurchases.insert(0, purchase);
+
+    final replenishment = ReplenishmentOrder(
+      id: 'rep-${DateTime.now().millisecondsSinceEpoch}',
+      code: repCode,
+      transferId: transferId,
+      borrowerId: deficit.id,
+      donorId: donor.id,
+      productId: productId,
+      productName: donorStock.productName,
+      quantity: quantity,
+      unit: donorStock.unit,
+      status: ReplenishmentStatus.compraEmitida,
+      linkedDirectPurchaseId: purchaseId,
+    );
+    _replenishments.insert(0, replenishment);
+
     final transfer = TransferLoan(
-      id: 'tr-${DateTime.now().millisecondsSinceEpoch}',
+      id: transferId,
       fromProducerId: donor.id,
       toProducerId: deficit.id,
       productId: productId,
@@ -673,12 +1010,13 @@ class AppState extends ChangeNotifier {
       quantity: quantity,
       unit: donorStock.unit,
       freightCost: freight,
-      freightPayerId: deficit.id, // quem pediu emprestado paga o frete
+      freightPayerId: deficit.id,
       sameGroup: true,
-      status: TransferStatus.entregue,
+      status: TransferStatus.reposicaoGerada,
       carrierId: carrier?.id,
       carrierName: carrier?.name,
-      replenishmentOrderId: 'OC-REP-${1000 + _transfers.length}',
+      replenishmentOrderId: repCode,
+      replenishmentPurchaseId: purchaseId,
     );
     _transfers.insert(0, transfer);
 
@@ -708,7 +1046,7 @@ class AppState extends ChangeNotifier {
       'Frete R\$ ${freight.toStringAsFixed(0)} pago por ${deficit.name} (solicitante) via ${carrier?.name ?? 'transportadora'}.',
     );
     _pushActivity(
-      'Ordem de reposição ${transfer.replenishmentOrderId} para ${deficit.name} repor stock de ${donor.name}.',
+      'Ordem $repCode + compra ${purchase.code}: ${deficit.name} deve repor stock de ${donor.name}.',
     );
     notifyListeners();
     return transfer;
@@ -723,6 +1061,52 @@ class AppState extends ChangeNotifier {
     return (qty * base).clamp(350, 12000);
   }
 
+  /// Cobrança efetiva da taxa de gestão (passo 17 UML).
+  FeeCharge chargeManagementFee({
+    required String producerId,
+    String season = 'Safra 2026/27',
+    HarvestMode? harvestMode,
+  }) {
+    final producer = producerById(producerId)!;
+    if (harvestMode != null) {
+      producer.harvestMode = harvestMode;
+    }
+    final kg = producer.managementFeeKg;
+    final charge = FeeCharge(
+      id: 'fee-${DateTime.now().millisecondsSinceEpoch}',
+      producerId: producerId,
+      season: season,
+      harvestMode: producer.harvestMode,
+      hectares: producer.hectares,
+      kgCharged: kg,
+      status: FeeChargeStatus.cobrada,
+      chargedAt: DateTime.now(),
+    );
+    _feeCharges.insert(0, charge);
+    _pushActivity(
+      'Taxa cobrada: ${producer.farm} · ${kg.toStringAsFixed(0)} kg soja '
+      '(${producer.hectares.toStringAsFixed(0)} ha × 33 × ${producer.harvestMode.feeMultiplier.toStringAsFixed(0)}) · $season.',
+    );
+    notifyListeners();
+    return charge;
+  }
+
+  int chargeAllManagementFees({String season = 'Safra 2026/27'}) {
+    var count = 0;
+    for (final p in _producers) {
+      final already = _feeCharges.any(
+        (f) =>
+            f.producerId == p.id &&
+            f.season == season &&
+            f.status == FeeChargeStatus.cobrada,
+      );
+      if (already) continue;
+      chargeManagementFee(producerId: p.id, season: season);
+      count++;
+    }
+    return count;
+  }
+
   void simulateRuptureDemo() {
     final dieselB = _stock.firstWhere(
       (s) => s.producerId == 'p-b' && s.productId == 'ins-diesel',
@@ -732,10 +1116,111 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Executa cenários mock alinhados às fases do UML.
+  String runDemoScenario(DemoScenarioId id) {
+    switch (id) {
+      case DemoScenarioId.compraPlaneadaCompleta:
+        return _scenarioCompraPlaneada();
+      case DemoScenarioId.ruturaEmprestimoReposicao:
+        return _scenarioRuturaReposicao();
+      case DemoScenarioId.liquidacaoFinanceira:
+        return _scenarioLiquidacao();
+      case DemoScenarioId.taxaGestao:
+        return _scenarioTaxa();
+    }
+  }
+
+  String _scenarioCompraPlaneada() {
+    // Garante necessidade de fertilizante se não houver.
+    final hasFertNeed = _needs.any(
+      (n) => n.productId == 'ins-fert' && n.mode == PurchaseMode.planeada,
+    );
+    if (!hasFertNeed) {
+      addNeed(
+        producerId: 'p-b',
+        productId: 'ins-fert',
+        productName: 'Fertilizante NPK',
+        quantity: 15,
+        unit: 't',
+        mode: PurchaseMode.planeada,
+      );
+      addNeed(
+        producerId: 'p-d',
+        productId: 'ins-fert',
+        productName: 'Fertilizante NPK',
+        quantity: 8,
+        unit: 't',
+        mode: PurchaseMode.planeada,
+      );
+    }
+
+    final lot = consolidatePlanned('ins-fert');
+    if (lot == null) {
+      return 'Sem necessidades de fertilizante para consolidar.';
+    }
+    quoteLot(lot.id, 3180);
+    approveLot(lot.id);
+    issueInvoice(lot.id);
+    settleLotFinancial(lot.id);
+    dispatchLotToWarehouse(lot.id);
+    receiveLotAtWarehouse(lot.id);
+    return 'Cenário OK: ${lot.code} consolidado → cotado → aprovado → faturado → liquidado → no armazém.';
+  }
+
+  String _scenarioRuturaReposicao() {
+    simulateRuptureDemo();
+    final result = attemptSmartLoan(
+      deficitProducerId: 'p-b',
+      productId: 'ins-diesel',
+      quantity: 2500,
+    );
+    if (result == null) {
+      return 'Matching falhou — sem excedente no grupo.';
+    }
+    if (result.status == TransferStatus.bloqueado) {
+      return result.blockReason ?? 'Troca bloqueada.';
+    }
+    final purchaseId = result.replenishmentPurchaseId;
+    if (purchaseId != null) {
+      confirmDirectPurchase(purchaseId);
+      deliverDirectPurchase(purchaseId);
+    }
+    return 'Cenário OK: rutura B → empréstimo A→B → ${result.replenishmentOrderId} entregue ao doador.';
+  }
+
+  String _scenarioLiquidacao() {
+    PurchaseLot? target;
+    for (final lot in _lots) {
+      if (!lot.settled && lot.quotedPricePerUnit != null) {
+        target = lot;
+        break;
+      }
+    }
+    if (target == null) {
+      return 'Nenhum lote pendente de liquidação.';
+    }
+    if (target.status == LotStatus.cotacao) {
+      approveLot(target.id);
+      issueInvoice(target.id);
+    } else if (target.status == LotStatus.aprovado) {
+      issueInvoice(target.id);
+    }
+    final s = settleLotFinancial(target.id);
+    if (s == null) return 'Não foi possível liquidar ${target.code}.';
+    return 'Cenário OK: ${target.code} liquidado — R\$ ${s.totalAmount.toStringAsFixed(0)}.';
+  }
+
+  String _scenarioTaxa() {
+    setHarvestMode('p-a', HarvestMode.multipla);
+    final a = chargeManagementFee(producerId: 'p-a');
+    final b = chargeManagementFee(producerId: 'p-b');
+    return 'Cenário OK: taxas cobradas — Horizonte ${a.kgCharged.toStringAsFixed(0)} kg · Boa Vista ${b.kgCharged.toStringAsFixed(0)} kg.';
+  }
+
   void _pushActivity(String message) {
     _activity.insert(0, message);
-    if (_activity.length > 40) {
-      _activity.removeRange(40, _activity.length);
+    if (_activity.length > 60) {
+      _activity.removeRange(60, _activity.length);
     }
   }
 }

@@ -14,13 +14,14 @@ O sistema é construído sobre quatro pilares funcionais:
 
 *   **Compra Planeada (Lote Único):** O ERP recolhe a programação de consumo anual/sazonal dos produtores, consolida os dados e negocia o volume total diretamente com os fornecedores.
 *   **Compra Direta (Just-in-Time):** Funcionalidade para necessidades imediatas, permitindo ao produtor ignorar a consolidação e efetuar o pedido diretamente ao fornecedor.
-*   **Separação de Responsabilidades:** O fluxo financeiro é estabelecido diretamente entre o fornecedor e o produtor agrícola. O sistema ERP encarrega-se unicamente da gestão lógica e física da operação.
+*   **Pipeline completo:** programação → consolidação → cotação → aprovação → faturação → **liquidação financeira** → despacho em trânsito → receção no armazém → distribuição JIT.
+*   **Separação de Responsabilidades:** O pagamento ocorre entre fornecedor e produtor. O ERP **regista** faturação e liquidação para auditoria operacional (`FinancialSettlement`).
 
 ### 2. Rede de Transferência e Empréstimos Laterais
 
 *   **Algoritmo de Matching de Stock:** Quando o sistema deteta uma rutura de stock num produtor (ex: Produtor B sem gasóleo), procura ativamente por um excedente ocioso noutro produtor do ecossistema.
 *   **Validação de Grupo:** A transferência física só é autorizada se o Produtor A (com excedente) e o Produtor B (com défice) pertencerem ao mesmo grupo operativo.
-*   **Custos e Reposição:** O frete da transferência é faturado diretamente ao produtor que solicita o empréstimo (Produtor B). O ERP gera uma ordem de compra vinculativa para que o Produtor B reponha o stock original do Produtor A.
+*   **Custos e Reposição:** O frete é faturado ao solicitante (B). O ERP gera **OC-REP** (`ReplenishmentOrder`) e uma **compra direta de reposição** cujo stock final é creditado ao **doador A** (passos 15→16 do UML).
 
 ### 3. Orquestração Logística Terceirizada
 
@@ -28,26 +29,29 @@ O sistema é construído sobre quatro pilares funcionais:
 *   **Logística Fracionada:** O sistema aciona transportadoras parceiras para fracionar a carga total e efetuar as entregas nas fazendas de acordo com o registo de consumo diário.
 *   **Gestão de Entregadores:** A plataforma possui um módulo de integração dedicado às empresas de logística terceirizadas, que gerem os fretes de entrega e das transferências de empréstimos.
 
-### 4. Categorização Estruturada
+### 4. CADPRO e Categorização Estruturada
 
-*   Os clientes/produtores são classificados por:
-    *   **Área de Exploração:** Registo em hectares (ha).
-    *   **Foco Produtivo:** Tipificação agrícola (Ex: Soja, Leite, Pecuária de Corte).
-    *   **Volume:** Escalão de produção.
-*   O sistema cobra uma taxa de gestão de 33 kg de soja por cada hectare anual administrado, suportando configurações para áreas de safra única ou múltipla.
+*   **CADPRO:** registo com **Nº Identificador** editável, CPF/CNPJ, CAR, município/UF, contactos e status.
+*   **Tipos de produção dinâmicos:** catálogo cadastrável (`ProductionTypeDef`); no formulário usa-se **Adicionar tipo** + dropdown + hectares (não campos fixos Soja/Leite/Carne).
+*   **Produção multi-tipo:** soma das reservas ≤ área total da fazenda.
+*   **Taxa de gestão:** 33 kg soja × ha × multiplicador de safra.
 
 ## Stack Tecnológica
 
-*   **Frontend (MVP e Painel Web):** Flutter Web. (Permite forte partilha de código para futuras implementações em iOS/Android nativo para os motoristas e equipas de terreno).
-*   **Backend (Motor ERP):** Java Spring Boot. (Responsável pelas regras transacionais, validação de grupos e algoritmo de *matching* de stock).
-*   **Base de Dados:** PostgreSQL. (Estrutura relacional robusta com suporte a PostGIS, para garantir a consistência das transações de inventário e preparar a infraestrutura para a otimização de rotas geográficas de frete).
+*   **Frontend (MVP e Painel Web):** Flutter Web, organizado em **submódulos** (`lib/modules/*`) e núcleo partilhado (`lib/core/*`).
+*   **Backend (Motor ERP):** Java Spring Boot (futuro).
+*   **Base de Dados:** PostgreSQL (+ PostGIS futuro).
 
 ## Versão Atual (0.0.1 - Mockup Executável)
 
-O repositório atual contém o protótipo inicial (MVP Visual) construído inteiramente em Flutter Web. O seu objetivo é validar a interface de utilizador (UI) e o fluxo lógico (UX) com investidores.
-
-**Características da Versão 0.0.1:**
-
 *   Ausência de backend e base de dados.
-*   Dados de *mock* integrados diretamente no código (Produtores, Insumos, Transportadoras).
-*   Simulação funcional das regras de "Compra Direta vs Planeada" e "Transferência de Insumos com Cobrança de Frete".
+*   Mock em `lib/core/data/mock_data.dart`.
+*   Modules: `auth`, `shell`, `producer`, `purchases`, `logistics`, `network`, `stock`, `fees`.
+*   Cenários UML no painel Admin/Gestora.
+
+### Ficheiros-chave
+
+*   `lib/modules/producer/producer_screen.dart` — CADPRO + tipos dinâmicos
+*   `lib/core/models/models.dart` — `ProductionTypeDef`, `ProductionArea`, `Producer`
+*   `lib/core/state/app_state.dart` — regras e cenários
+*   `lib/modules/README.md` — mapa dos submódulos

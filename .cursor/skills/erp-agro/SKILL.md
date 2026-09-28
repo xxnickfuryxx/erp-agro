@@ -28,8 +28,32 @@ Objetivo: transformar necessidades individuais em volume de compra consolidado (
 
 - Protótipo **Flutter Web** para validar UI/UX com investidores.
 - **Sem backend nem base de dados.**
-- Dados mock no código (Produtores, Insumos, Transportadoras).
-- Simular: Compra Direta vs Planeada; Transferência de Insumos com cobrança de frete.
+- Código organizado em **submódulos** (`lib/modules/`) + `lib/core/`.
+- CADPRO com **Nº Identificador** e **tipos de produção dinâmicos** (cadastro + reservas de ha).
+- Simular: Compras, logística, empréstimos, liquidação, OC-REP, taxa 33 kg/ha.
+- Cenários demo no painel Admin/Gestora.
+
+## Arquitetura de pastas
+
+```
+lib/core/          → models, state, data, theme, widgets
+lib/modules/auth|shell|producer|purchases|logistics|network|stock|fees
+```
+
+## Pipeline UML (mock)
+
+1. Programação de necessidades  
+2. Consolidação em lote único  
+3. Cotação  
+4. Aprovação / fecho  
+5. Faturação direta  
+6. **Liquidação financeira** (registo ERP; pagamento fora)  
+7–8. Despacho em trânsito → receção no armazém  
+9–10. Distribuição JIT → stock na fazenda  
+11–12. Consumo diário → rutura  
+13–14. Matching + transferência A→B  
+15–16. **OC-REP + compra vinculativa** → stock reposto em A  
+17. **Cobrança taxa** 33 kg soja/ha (safra única/múltipla)
 
 ## Como a IA deve agir neste repo
 
@@ -37,15 +61,15 @@ Objetivo: transformar necessidades individuais em volume de compra consolidado (
 2. Não inventar integração real com Spring Boot/PostgreSQL nesta fase, salvo pedido explícito.
 3. Preferir mock local coerente com o domínio (produtores, grupos, insumos, transportadoras).
 4. Respeitar as regras de negócio dos quatro pilares — ver skill `erp-agro-regras-negocio`.
-5. Separação financeira: ERP gere lógica/física; faturação fornecedor↔produtor é fora do escopo operacional do sistema.
+5. Separação financeira: ERP **regista** faturação/liquidação; o pagamento real é fornecedor↔produtor.
 6. Responder e documentar em português, alinhado ao domínio agrícola.
 
 ## Pilares (resumo)
 
 1. **Compras bifurcadas** — Planeada (lote consolidado) vs Direta (JIT)
-2. **Empréstimos laterais** — matching de stock + mesmo grupo + frete ao solicitante + ordem de reposição
+2. **Empréstimos laterais** — matching + mesmo grupo + frete ao solicitante + OC-REP → compra de reposição
 3. **Logística terceirizada** — armazém de retaguarda + fracionamento + transportadoras
-4. **Categorização** — ha, foco produtivo, volume; taxa 33 kg soja/ha/ano
+4. **CADPRO + categorização** — cadastro do produtor rural; fazenda com **múltiplos focos** e **hectares reservados** por tipo; taxa 33 kg soja/ha/ano
 
 ## Referência detalhada
 

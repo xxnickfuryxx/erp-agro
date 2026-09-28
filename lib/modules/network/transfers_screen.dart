@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import '../models/models.dart';
-import '../state/app_state.dart';
-import '../theme/app_theme.dart';
-import '../widgets/common.dart';
+import '../../core/models/models.dart';
+import '../../core/state/app_state.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/common.dart';
 
 class TransfersScreen extends StatelessWidget {
   const TransfersScreen({super.key, required this.state});
@@ -62,7 +62,8 @@ class TransfersScreen extends StatelessWidget {
                 '• Troca de produto (soja, diesel, etc.) só é permitida se os dois produtores '
                 'estiverem no mesmo grupo de fazendeiros.\n'
                 '• Quem pediu emprestado paga o frete da transferência.\n'
-                '• O transporte é feito por empresa terceirizada cadastrada.',
+                '• O transporte é feito por empresa terceirizada cadastrada.\n'
+                '• Gera-se OC-REP + compra vinculativa para B repor o stock de A.',
                 style: GoogleFonts.manrope(
                   fontSize: 13,
                   height: 1.5,
@@ -74,6 +75,8 @@ class TransfersScreen extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _GroupsOverview(state: state),
+        const SizedBox(height: 20),
+        _ReplenishmentsPanel(state: state),
         const SizedBox(height: 20),
         Text(
           'Ruturas ativas',
@@ -129,7 +132,7 @@ class TransfersScreen extends StatelessWidget {
                                     ? 'Sem doador elegível no mesmo grupo.'
                                     : result.status == TransferStatus.bloqueado
                                         ? result.blockReason!
-                                        : 'Troca ok. Frete ${money.format(result.freightCost)} pago pelo solicitante.',
+                                        : 'Troca ok. OC ${result.replenishmentOrderId} gerada. Frete ${money.format(result.freightCost)}.',
                               ),
                             ),
                           );
@@ -175,8 +178,12 @@ class TransfersScreen extends StatelessWidget {
                           ),
                         ),
                         StatusPill(
-                          label: t.sameGroup ? 'Mesmo grupo' : 'Bloqueado',
-                          tone: t.sameGroup ? PillTone.success : PillTone.danger,
+                          label: t.sameGroup ? t.status.label : 'Bloqueado',
+                          tone: t.sameGroup
+                              ? (t.status == TransferStatus.reposicaoConcluida
+                                  ? PillTone.success
+                                  : PillTone.gold)
+                              : PillTone.danger,
                         ),
                       ],
                     ),
@@ -190,6 +197,7 @@ class TransfersScreen extends StatelessWidget {
                       t.sameGroup
                           ? 'Frete ${money.format(t.freightCost)} pago por ${payer?.name} (quem pediu)\n'
                               'Transportadora: ${t.carrierName ?? '—'} · Reposição: ${t.replenishmentOrderId}'
+                              '${t.replenishmentPurchaseId != null ? ' · Compra ${t.replenishmentPurchaseId}' : ''}'
                           : (t.blockReason ?? 'Grupos diferentes'),
                       style: GoogleFonts.manrope(
                         fontSize: 12,
@@ -279,7 +287,7 @@ class TransfersScreen extends StatelessWidget {
                         for (final p in sameGroupPeers)
                           DropdownMenuItem(
                             value: p.id,
-                            child: Text('${p.farm} · ${p.productionType.shortLabel}'),
+                            child: Text('${p.farm} · ${p.focus}'),
                           ),
                       ],
                       onChanged: (v) => setLocal(() => donorId = v),
@@ -415,6 +423,112 @@ class TransfersScreen extends StatelessWidget {
   }
 }
 
+class _ReplenishmentsPanel extends StatelessWidget {
+  const _ReplenishmentsPanel({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = state.currentUser!.role;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Ordens de reposição (OC-REP)',
+          style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Passos 15→16 UML: B compra lote para repor stock do doador A.',
+          style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 10),
+        if (state.replenishments.isEmpty)
+          const EmptyHint(message: 'Nenhuma ordem de reposição.')
+        else
+          ...state.replenishments.map((r) {
+            final donor = state.producerById(r.donorId);
+            final borrower = state.producerById(r.borrowerId);
+            DirectPurchase? purchase;
+            for (final d in state.directPurchases) {
+              if (d.id == r.linkedDirectPurchaseId) {
+                purchase = d;
+                break;
+              }
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${r.code} · ${r.productName}',
+                            style: GoogleFonts.manrope(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        StatusPill(
+                          label: r.status.label,
+                          tone: r.status == ReplenishmentStatus.entregueAoDoador
+                              ? PillTone.success
+                              : PillTone.warning,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${r.quantity.toStringAsFixed(0)} ${r.unit} · '
+                      '${borrower?.farm ?? 'B'} compra para repor ${donor?.farm ?? 'A'}'
+                      '${purchase != null ? ' · ${purchase.code} (${purchase.status.name})' : ''}',
+                      style: GoogleFonts.manrope(
+                        fontSize: 12,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                    if (role.canActAsSupplier &&
+                        purchase != null &&
+                        purchase.status != DirectOrderStatus.entregue) ...[
+                      const SizedBox(height: 10),
+                      FilledButton(
+                        onPressed: () {
+                          final order = purchase!;
+                          if (order.status == DirectOrderStatus.enviado) {
+                            state.confirmDirectPurchase(order.id);
+                          }
+                          state.deliverDirectPurchase(order.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${r.code} entregue a ${donor?.farm ?? 'doador'}.',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Entregar reposição ao doador'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
 class _GroupsOverview extends StatelessWidget {
   const _GroupsOverview({required this.state});
 
@@ -462,7 +576,7 @@ class _GroupsOverview extends StatelessWidget {
                         for (final p in members)
                           StatusPill(
                             label:
-                                '${p.farm} · ${p.productionType.shortLabel} · ${p.hectares.toStringAsFixed(0)} ha',
+                                '${p.farm} · ${p.focus} · ${p.hectares.toStringAsFixed(0)} ha',
                             tone: PillTone.info,
                           ),
                         if (members.isEmpty)
@@ -481,3 +595,4 @@ class _GroupsOverview extends StatelessWidget {
     );
   }
 }
+
