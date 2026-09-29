@@ -39,42 +39,56 @@ class ReportsScreen extends StatelessWidget {
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, c) {
-            final cols = c.maxWidth > 900 ? 4 : c.maxWidth > 600 ? 2 : 1;
+            final cards = [
+              MetricCard(
+                label: 'Taxa prevista',
+                value: '${feeTotal.toStringAsFixed(0)} kg',
+                icon: Icons.grass,
+                subtitle: state.feeConfig.formulaLabel,
+                accent: AppColors.gold,
+              ),
+              MetricCard(
+                label: 'Taxa já cobrada',
+                value: '${charged.toStringAsFixed(0)} kg',
+                icon: Icons.request_page_outlined,
+                subtitle: '${state.feeCharges.length} lançamento(s)',
+              ),
+              MetricCard(
+                label: 'OC-REP abertas',
+                value: '$openRep',
+                icon: Icons.swap_horiz,
+                subtitle: 'Reposições pendentes',
+                accent: openRep > 0 ? AppColors.warning : AppColors.success,
+              ),
+              MetricCard(
+                label: 'Armazém distribuído',
+                value:
+                    '${warehouseFill.isNaN ? 0 : warehouseFill.toStringAsFixed(0)}%',
+                icon: Icons.warehouse_outlined,
+                subtitle: '${state.warehouse.length} lote(s)',
+              ),
+            ];
+
+            if (c.maxWidth < 600) {
+              return Column(
+                children: [
+                  for (var i = 0; i < cards.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 12),
+                    cards[i],
+                  ],
+                ],
+              );
+            }
+
+            final cols = c.maxWidth > 900 ? 4 : 2;
             return GridView.count(
               crossAxisCount: cols,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: cols == 1 ? 2.6 : 1.5,
-              children: [
-                MetricCard(
-                  label: 'Taxa prevista',
-                  value: '${feeTotal.toStringAsFixed(0)} kg',
-                  icon: Icons.grass,
-                  subtitle: state.feeConfig.formulaLabel,
-                  accent: AppColors.gold,
-                ),
-                MetricCard(
-                  label: 'Taxa já cobrada',
-                  value: '${charged.toStringAsFixed(0)} kg',
-                  icon: Icons.request_page_outlined,
-                  subtitle: '${state.feeCharges.length} lançamento(s)',
-                ),
-                MetricCard(
-                  label: 'OC-REP abertas',
-                  value: '$openRep',
-                  icon: Icons.swap_horiz,
-                  subtitle: 'Reposições pendentes',
-                  accent: openRep > 0 ? AppColors.warning : AppColors.success,
-                ),
-                MetricCard(
-                  label: 'Armazém distribuído',
-                  value: '${warehouseFill.isNaN ? 0 : warehouseFill.toStringAsFixed(0)}%',
-                  icon: Icons.warehouse_outlined,
-                  subtitle: '${state.warehouse.length} lote(s)',
-                ),
-              ],
+              childAspectRatio: cols == 4 ? 1.45 : 1.55,
+              children: cards,
             );
           },
         ),

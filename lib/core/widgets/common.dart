@@ -63,7 +63,7 @@ class MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -71,12 +71,13 @@ class MetricCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
@@ -86,29 +87,35 @@ class MetricCard extends StatelessWidget {
               const Spacer(),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.manrope(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.muted,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.manrope(
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.w800,
               color: AppColors.ink,
             ),
           ),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               subtitle!,
-              style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.manrope(fontSize: 11, color: AppColors.muted),
             ),
           ],
         ],
@@ -131,35 +138,53 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.manrope(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  subtitle!,
-                  style: GoogleFonts.manrope(
-                    fontSize: 13,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-            ],
+        Text(
+          title,
+          style: GoogleFonts.manrope(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        ?action,
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              color: AppColors.muted,
+            ),
+          ),
+        ],
       ],
+    );
+
+    if (action == null) return titleBlock;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = constraints.maxWidth < 760;
+        if (stack) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleBlock,
+              const SizedBox(height: 12),
+              SizedBox(width: double.infinity, child: action),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: titleBlock),
+            const SizedBox(width: 12),
+            Flexible(child: action!),
+          ],
+        );
+      },
     );
   }
 }

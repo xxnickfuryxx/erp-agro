@@ -49,7 +49,7 @@ class _AppShellState extends State<AppShell> {
         _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),
         _NavItem('Stock', Icons.inventory_2_outlined, (s) => StockScreen(state: s)),
         _NavItem('Taxas', Icons.payments_outlined, (s) => FeesScreen(state: s)),
-        _NavItem('Relatórios', Icons.assessment_outlined, (s) => ReportsScreen(state: s)),
+        _NavItem('Relatórios', Icons.bar_chart_rounded, (s) => ReportsScreen(state: s)),
       ];
     }
 
@@ -74,7 +74,7 @@ class _AppShellState extends State<AppShell> {
           _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),
           _NavItem('Stock', Icons.inventory_2_outlined, (s) => StockScreen(state: s)),
           _NavItem('Taxas', Icons.payments_outlined, (s) => FeesScreen(state: s)),
-          _NavItem('Relatórios', Icons.assessment_outlined, (s) => ReportsScreen(state: s)),
+          _NavItem('Relatórios', Icons.bar_chart_rounded, (s) => ReportsScreen(state: s)),
         ];
       case UserRole.fornecedor:
         return [
@@ -161,6 +161,8 @@ class _AppShellState extends State<AppShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        height: 68,
         destinations: [
           for (final item in items)
             NavigationDestination(icon: Icon(item.icon), label: item.label),

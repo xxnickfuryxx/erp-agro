@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/data/brazil_uf.dart';
 import '../../core/models/models.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
@@ -90,7 +91,7 @@ class _ProducerScreenState extends State<ProducerScreen>
                   _tabs.animateTo(3);
                   _openSupplierDialog(context);
                 },
-                icon: const Icon(Icons.storefront_outlined),
+                icon: const Icon(Icons.handshake_outlined),
                 label: const Text('Novo fornecedor'),
               ),
               OutlinedButton.icon(
@@ -259,11 +260,11 @@ class _ProducerScreenState extends State<ProducerScreen>
     final document = TextEditingController(text: p.document);
     final car = TextEditingController(text: p.car);
     final municipality = TextEditingController(text: p.municipality);
-    final uf = TextEditingController(text: p.stateUf);
     final phone = TextEditingController(text: p.phone);
     final email = TextEditingController(text: p.email);
     final ha = TextEditingController(text: p.hectares.toStringAsFixed(0));
     CadproStatus status = p.cadproStatus;
+    String selectedUf = BrazilUf.resolve(p.stateUf);
 
     await showDialog<void>(
       context: context,
@@ -331,6 +332,7 @@ class _ProducerScreenState extends State<ProducerScreen>
                       Row(
                         children: [
                           Expanded(
+                            flex: 2,
                             child: TextField(
                               controller: municipality,
                               decoration: const InputDecoration(
@@ -340,10 +342,23 @@ class _ProducerScreenState extends State<ProducerScreen>
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: TextField(
-                              controller: uf,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: selectedUf,
+                              isExpanded: true,
                               decoration:
                                   const InputDecoration(labelText: 'UF'),
+                              items: [
+                                for (final code in BrazilUf.codes)
+                                  DropdownMenuItem(
+                                    value: code,
+                                    child: Text(code),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setLocal(() => selectedUf = v);
+                                }
+                              },
                             ),
                           ),
                         ],
@@ -378,7 +393,7 @@ class _ProducerScreenState extends State<ProducerScreen>
                       document: document.text,
                       car: car.text,
                       municipality: municipality.text,
-                      stateUf: uf.text,
+                      stateUf: selectedUf,
                       phone: phone.text,
                       email: email.text,
                       hectares:
@@ -605,7 +620,7 @@ class _ProducerScreenState extends State<ProducerScreen>
     final document = TextEditingController();
     final car = TextEditingController();
     final municipality = TextEditingController();
-    final uf = TextEditingController(text: 'MT');
+    String selectedUf = 'MT';
     final phone = TextEditingController();
     final email = TextEditingController();
     String groupId = state.groups.first.id;
@@ -706,9 +721,23 @@ class _ProducerScreenState extends State<ProducerScreen>
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: TextField(
-                              controller: uf,
-                              decoration: const InputDecoration(labelText: 'UF'),
+                            child: DropdownButtonFormField<String>(
+                              initialValue: selectedUf,
+                              isExpanded: true,
+                              decoration:
+                                  const InputDecoration(labelText: 'UF'),
+                              items: [
+                                for (final code in BrazilUf.codes)
+                                  DropdownMenuItem(
+                                    value: code,
+                                    child: Text(code),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setLocal(() => selectedUf = v);
+                                }
+                              },
                             ),
                           ),
                         ],
@@ -906,7 +935,7 @@ class _ProducerScreenState extends State<ProducerScreen>
                         document: document.text,
                         car: car.text,
                         municipality: municipality.text,
-                        stateUf: uf.text,
+                        stateUf: selectedUf,
                         phone: phone.text,
                         email: email.text,
                         harvestMode: harvestMode,
@@ -1384,7 +1413,7 @@ class _SuppliersTab extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: FilledButton.icon(
             onPressed: onAdd,
-            icon: const Icon(Icons.storefront_outlined),
+            icon: const Icon(Icons.handshake_outlined),
             label: const Text('Cadastrar fornecedor'),
           ),
         ),
