@@ -37,7 +37,7 @@ Objetivo: transformar necessidades individuais em volume de compra consolidado (
 
 ```
 lib/core/          → models, state, data, theme, widgets
-lib/modules/auth|shell|producer|purchases|logistics|network|stock|fees
+lib/modules/auth|shell|producer|purchases|logistics|network|stock|fees|reports
 ```
 
 ## Pipeline UML (mock)

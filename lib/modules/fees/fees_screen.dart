@@ -19,15 +19,16 @@ class FeesScreen extends StatelessWidget {
         ? [state.currentProducer!]
         : state.producers;
 
-    final total = list.fold<double>(0, (a, p) => a + p.managementFeeKg);
+    final total =
+        list.fold<double>(0, (a, p) => a + state.managementFeeFor(p));
     final dateFmt = DateFormat('dd/MM/yyyy');
+    final cfg = state.feeConfig;
 
     return ListView(
       children: [
         SectionHeader(
           title: 'Taxa de gestão',
-          subtitle:
-              '33 kg de soja por hectare anual · safra única ou múltipla · cobrança registada no ERP',
+          subtitle: cfg.formulaLabel,
           action: role.canManageEcosystem
               ? FilledButton.icon(
                   onPressed: () {
@@ -47,6 +48,10 @@ class FeesScreen extends StatelessWidget {
                 )
               : null,
         ),
+        if (role.canManageEcosystem) ...[
+          const SizedBox(height: 12),
+          _FeeConfigCard(state: state),
+        ],
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(20),
@@ -72,7 +77,7 @@ class FeesScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${total.toStringAsFixed(0)} kg soja',
+                      '${total.toStringAsFixed(0)} kg ${cfg.commodityLabel}',
                       style: GoogleFonts.manrope(
                         color: Colors.white,
                         fontSize: 32,
@@ -80,7 +85,7 @@ class FeesScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'ha × 33 × multiplicador de safra',
+                      cfg.formulaLabel,
                       style: GoogleFonts.manrope(
                         color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 13,
@@ -96,6 +101,7 @@ class FeesScreen extends StatelessWidget {
         const SizedBox(height: 20),
         ...list.map((p) {
           final last = state.latestFeeFor(p.id);
+          final kg = state.managementFeeFor(p);
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Container(
@@ -141,7 +147,7 @@ class FeesScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${p.managementFeeKg.toStringAsFixed(0)} kg',
+                            '${kg.toStringAsFixed(0)} kg',
                             style: GoogleFonts.manrope(
                               fontWeight: FontWeight.w800,
                               color: AppColors.forest,
@@ -189,7 +195,7 @@ class FeesScreen extends StatelessWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Cobrados ${c.kgCharged.toStringAsFixed(0)} kg soja · ${c.season}',
+                                  'Cobrados ${c.kgCharged.toStringAsFixed(0)} kg · ${c.season}',
                                 ),
                               ),
                             );
@@ -241,12 +247,109 @@ class FeesScreen extends StatelessWidget {
               ),
             );
           }),
-        const SizedBox(height: 8),
-        const EmptyHint(
-          message:
-              'Fórmula UML: hectares × 33 kg soja/ano × (1 se safra única, 2 se múltipla).',
-        ),
       ],
+    );
+  }
+}
+
+class _FeeConfigCard extends StatefulWidget {
+  const _FeeConfigCard({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_FeeConfigCard> createState() => _FeeConfigCardState();
+}
+
+class _FeeConfigCardState extends State<_FeeConfigCard> {
+  late final TextEditingController _kg;
+  late final TextEditingController _season;
+  late final TextEditingController _commodity;
+
+  @override
+  void initState() {
+    super.initState();
+    final c = widget.state.feeConfig;
+    _kg = TextEditingController(text: c.kgPerHa.toStringAsFixed(0));
+    _season = TextEditingController(text: c.defaultSeason);
+    _commodity = TextEditingController(text: c.commodityLabel);
+  }
+
+  @override
+  void dispose() {
+    _kg.dispose();
+    _season.dispose();
+    _commodity.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cadastro de parâmetros da taxa',
+            style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _kg,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'kg / hectare',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _commodity,
+                  decoration: const InputDecoration(
+                    labelText: 'Commodity (ex.: soja)',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _season,
+            decoration: const InputDecoration(
+              labelText: 'Safra padrão',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: () {
+                final kg =
+                    double.tryParse(_kg.text.replaceAll(',', '.')) ?? 33;
+                widget.state.updateFeeConfig(
+                  kgPerHa: kg,
+                  defaultSeason: _season.text,
+                  commodityLabel: _commodity.text,
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Parâmetros de taxa salvos.')),
+                );
+              },
+              child: const Text('Salvar parâmetros'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

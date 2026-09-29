@@ -8,9 +8,14 @@ import '../../core/widgets/common.dart';
 
 /// Módulo CADPRO — Cadastro do Produtor Rural, tipos de produção, produtos e grupos.
 class ProducerScreen extends StatefulWidget {
-  const ProducerScreen({super.key, required this.state});
+  const ProducerScreen({
+    super.key,
+    required this.state,
+    this.myFarmOnly = false,
+  });
 
   final AppState state;
+  final bool myFarmOnly;
 
   @override
   State<ProducerScreen> createState() => _ProducerScreenState();
@@ -23,7 +28,7 @@ class _ProducerScreenState extends State<ProducerScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: widget.myFarmOnly ? 1 : 5, vsync: this);
   }
 
   @override
@@ -36,13 +41,37 @@ class _ProducerScreenState extends State<ProducerScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.myFarmOnly) {
+      final me = state.currentProducer;
+      return ListView(
+        children: [
+          const SectionHeader(
+            title: 'Minha fazenda',
+            subtitle: 'CADPRO do produtor autenticado (leitura / estado)',
+          ),
+          const SizedBox(height: 16),
+          if (me == null)
+            const EmptyHint(message: 'Sem produtor associado a este utilizador.')
+          else
+            _ProducerCard(
+              state: state,
+              producer: me,
+              readOnly: true,
+              onEdit: null,
+              onEditAreas: null,
+              onMoveGroup: null,
+            ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
           title: 'Módulo CADPRO',
           subtitle:
-              'Cadastro do produtor rural · tipos de produção dinâmicos · produtos · grupos',
+              'Produtores · tipos · insumos · fornecedores · grupos',
           action: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -50,11 +79,19 @@ class _ProducerScreenState extends State<ProducerScreen>
             children: [
               OutlinedButton.icon(
                 onPressed: () {
-                  _tabs.animateTo(3);
+                  _tabs.animateTo(4);
                   _openGroupDialog(context);
                 },
                 icon: const Icon(Icons.groups_outlined),
                 label: const Text('Novo grupo'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  _tabs.animateTo(3);
+                  _openSupplierDialog(context);
+                },
+                icon: const Icon(Icons.storefront_outlined),
+                label: const Text('Novo fornecedor'),
               ),
               OutlinedButton.icon(
                 onPressed: () {
@@ -93,9 +130,9 @@ class _ProducerScreenState extends State<ProducerScreen>
             border: Border.all(color: AppColors.line),
           ),
           child: Text(
-            '1) Cadastre tipos de produção (Soja, Leite, Carne…). '
-            '2) No CADPRO, escolha tipos e reserve hectares dinamicamente. '
-            '3) Informe o Nº Identificador CADPRO. A soma das reservas ≤ área total.',
+            '1) Cadastre tipos e fornecedores. '
+            '2) No CADPRO reserve hectares por tipo. '
+            '3) Informe o Nº Identificador. A soma das reservas ≤ área total.',
             style: GoogleFonts.manrope(fontSize: 13, height: 1.4),
           ),
         ),
@@ -110,7 +147,8 @@ class _ProducerScreenState extends State<ProducerScreen>
           tabs: [
             Tab(text: 'Produtores (${state.producers.length})'),
             Tab(text: 'Tipos (${state.productionTypes.length})'),
-            Tab(text: 'Produtos (${state.products.length})'),
+            Tab(text: 'Insumos (${state.products.length})'),
+            Tab(text: 'Fornecedores (${state.suppliers.length})'),
             Tab(text: 'Grupos (${state.groups.length})'),
           ],
         ),
@@ -124,6 +162,7 @@ class _ProducerScreenState extends State<ProducerScreen>
                 onAdd: () => _openCadproDialog(context),
                 onMoveGroup: (p) => _openMoveGroupDialog(context, p),
                 onEditAreas: (p) => _openEditAreasDialog(context, p),
+                onEdit: (p) => _openEditCadproDialog(context, p),
               ),
               _ProductionTypesTab(
                 state: state,
@@ -133,6 +172,10 @@ class _ProducerScreenState extends State<ProducerScreen>
                 state: state,
                 onAdd: () => _openProductDialog(context),
               ),
+              _SuppliersTab(
+                state: state,
+                onAdd: () => _openSupplierDialog(context),
+              ),
               _GroupsTab(
                 state: state,
                 onAdd: () => _openGroupDialog(context),
@@ -141,6 +184,216 @@ class _ProducerScreenState extends State<ProducerScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _openSupplierDialog(BuildContext context) async {
+    final name = TextEditingController();
+    final cnpj = TextEditingController();
+    final contact = TextEditingController();
+    final country = TextEditingController(text: 'Brasil');
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Cadastrar fornecedor',
+          style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Nome *'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: cnpj,
+                decoration: const InputDecoration(labelText: 'CNPJ'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: contact,
+                decoration: const InputDecoration(labelText: 'Contacto'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: country,
+                decoration: const InputDecoration(labelText: 'País / região'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (name.text.trim().isEmpty) return;
+              final s = state.registerSupplier(
+                name: name.text,
+                cnpj: cnpj.text,
+                contact: contact.text,
+                country: country.text,
+              );
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Fornecedor “${s.name}” cadastrado.')),
+              );
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openEditCadproDialog(BuildContext context, Producer p) async {
+    final name = TextEditingController(text: p.name);
+    final farm = TextEditingController(text: p.farm);
+    final cadproId = TextEditingController(text: p.cadproCode);
+    final document = TextEditingController(text: p.document);
+    final car = TextEditingController(text: p.car);
+    final municipality = TextEditingController(text: p.municipality);
+    final uf = TextEditingController(text: p.stateUf);
+    final phone = TextEditingController(text: p.phone);
+    final email = TextEditingController(text: p.email);
+    final ha = TextEditingController(text: p.hectares.toStringAsFixed(0));
+    CadproStatus status = p.cadproStatus;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: Text(
+                'Editar CADPRO',
+                style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: cadproId,
+                        decoration: const InputDecoration(
+                          labelText: 'Nº Identificador CADPRO *',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: name,
+                        decoration: const InputDecoration(labelText: 'Nome *'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: farm,
+                        decoration:
+                            const InputDecoration(labelText: 'Fazenda *'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: ha,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            const InputDecoration(labelText: 'Área total (ha)'),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<CadproStatus>(
+                        initialValue: status,
+                        decoration:
+                            const InputDecoration(labelText: 'Status CADPRO'),
+                        items: [
+                          for (final s in CadproStatus.values)
+                            DropdownMenuItem(value: s, child: Text(s.label)),
+                        ],
+                        onChanged: (v) => setLocal(() => status = v!),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: document,
+                        decoration:
+                            const InputDecoration(labelText: 'CPF / CNPJ'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: car,
+                        decoration: const InputDecoration(labelText: 'CAR'),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: municipality,
+                              decoration: const InputDecoration(
+                                labelText: 'Município',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: uf,
+                              decoration:
+                                  const InputDecoration(labelText: 'UF'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: phone,
+                        decoration:
+                            const InputDecoration(labelText: 'Telefone'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: email,
+                        decoration: const InputDecoration(labelText: 'E-mail'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    state.updateClient(
+                      producerId: p.id,
+                      name: name.text,
+                      farm: farm.text,
+                      cadproCode: cadproId.text,
+                      document: document.text,
+                      car: car.text,
+                      municipality: municipality.text,
+                      stateUf: uf.text,
+                      phone: phone.text,
+                      email: email.text,
+                      hectares:
+                          double.tryParse(ha.text.replaceAll(',', '.')),
+                      status: status,
+                    );
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -919,58 +1172,232 @@ class _AreaRow {
   final TextEditingController haCtrl;
 }
 
-class _ProducersTab extends StatelessWidget {
+class _ProducersTab extends StatefulWidget {
   const _ProducersTab({
     required this.state,
     required this.onAdd,
     required this.onMoveGroup,
     required this.onEditAreas,
+    required this.onEdit,
   });
 
   final AppState state;
   final VoidCallback onAdd;
   final void Function(Producer p) onMoveGroup;
   final void Function(Producer p) onEditAreas;
+  final void Function(Producer p) onEdit;
+
+  @override
+  State<_ProducersTab> createState() => _ProducersTabState();
+}
+
+class _ProducersTabState extends State<_ProducersTab> {
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
-    final byType = <String, int>{};
-    for (final t in state.productionTypes) {
-      byType[t.id] = 0;
-    }
-    for (final p in state.producers) {
-      for (final id in p.productionTypeIds) {
-        byType[id] = (byType[id] ?? 0) + 1;
-      }
-    }
+    final state = widget.state;
+    final filtered = state.producers.where((p) {
+      if (_query.trim().isEmpty) return true;
+      final q = _query.toLowerCase();
+      return p.name.toLowerCase().contains(q) ||
+          p.farm.toLowerCase().contains(q) ||
+          p.cadproCode.toLowerCase().contains(q) ||
+          p.groupName.toLowerCase().contains(q) ||
+          p.focus.toLowerCase().contains(q);
+    }).toList();
 
     return ListView(
       children: [
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.icon(
-            onPressed: onAdd,
+            onPressed: widget.onAdd,
             icon: const Icon(Icons.badge_outlined),
             label: const Text('Novo CADPRO'),
           ),
         ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final type in state.productionTypes)
-              StatusPill(
-                label: '${type.shortLabel}: ${byType[type.id] ?? 0} fazenda(s)',
-                tone: type.active ? PillTone.gold : PillTone.neutral,
-              ),
-          ],
+        const SizedBox(height: 12),
+        TextField(
+          onChanged: (v) => setState(() => _query = v),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            labelText: 'Pesquisar fazenda, CADPRO, grupo…',
+          ),
         ),
         const SizedBox(height: 14),
-        if (state.producers.isEmpty)
-          const EmptyHint(message: 'Nenhum CADPRO. Clique em “Novo CADPRO”.')
+        if (filtered.isEmpty)
+          const EmptyHint(message: 'Nenhum resultado.')
         else
-          ...state.producers.map((p) {
+          ...filtered.map(
+            (p) => _ProducerCard(
+              state: state,
+              producer: p,
+              onEdit: () => widget.onEdit(p),
+              onEditAreas: () => widget.onEditAreas(p),
+              onMoveGroup: () => widget.onMoveGroup(p),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ProducerCard extends StatelessWidget {
+  const _ProducerCard({
+    required this.state,
+    required this.producer,
+    this.readOnly = false,
+    this.onEdit,
+    this.onEditAreas,
+    this.onMoveGroup,
+  });
+
+  final AppState state;
+  final Producer producer;
+  final bool readOnly;
+  final VoidCallback? onEdit;
+  final VoidCallback? onEditAreas;
+  final VoidCallback? onMoveGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = producer;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.forest.withValues(alpha: 0.1),
+                  child: Text(
+                    p.name.substring(0, 1),
+                    style: GoogleFonts.manrope(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.forest,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.name,
+                        style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        '${p.farm} · Nº ${p.cadproCode} · Grupo: ${p.groupName}',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StatusPill(
+                  label: p.cadproStatus.label,
+                  tone: p.cadproStatus == CadproStatus.ativo
+                      ? PillTone.success
+                      : PillTone.warning,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                StatusPill(
+                  label: 'Total ${p.hectares.toStringAsFixed(0)} ha',
+                  tone: PillTone.neutral,
+                ),
+                for (final area in p.productionAreas)
+                  StatusPill(label: area.label, tone: PillTone.gold),
+              ],
+            ),
+            if (!readOnly) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (onEdit != null)
+                    TextButton(
+                      onPressed: onEdit,
+                      child: const Text('Editar CADPRO'),
+                    ),
+                  if (onEditAreas != null)
+                    TextButton(
+                      onPressed: onEditAreas,
+                      child: const Text('Editar produção'),
+                    ),
+                  if (onMoveGroup != null)
+                    TextButton(
+                      onPressed: onMoveGroup,
+                      child: const Text('Mudar grupo'),
+                    ),
+                  TextButton(
+                    onPressed: () => state.updateCadproStatus(
+                      p.id,
+                      p.cadproStatus == CadproStatus.ativo
+                          ? CadproStatus.inativo
+                          : CadproStatus.ativo,
+                    ),
+                    child: Text(
+                      p.cadproStatus == CadproStatus.ativo
+                          ? 'Inativar'
+                          : 'Ativar',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SuppliersTab extends StatelessWidget {
+  const _SuppliersTab({required this.state, required this.onAdd});
+
+  final AppState state;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.storefront_outlined),
+            label: const Text('Cadastrar fornecedor'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Fornecedores usados em cotações e compras diretas.',
+          style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 14),
+        if (state.suppliers.isEmpty)
+          const EmptyHint(message: 'Nenhum fornecedor.')
+        else
+          ...state.suppliers.map((s) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Container(
@@ -980,77 +1407,35 @@ class _ProducersTab extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.line),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor:
-                              AppColors.forest.withValues(alpha: 0.1),
-                          child: Text(
-                            p.name.substring(0, 1),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.name,
                             style: GoogleFonts.manrope(
                               fontWeight: FontWeight.w800,
-                              color: AppColors.forest,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p.name,
-                                style: GoogleFonts.manrope(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                '${p.farm} · Nº ${p.cadproCode} · Grupo: ${p.groupName}',
-                                style: GoogleFonts.manrope(
-                                  fontSize: 12,
-                                  color: AppColors.muted,
-                                ),
-                              ),
-                            ],
+                          Text(
+                            '${s.cnpj} · ${s.country} · ${s.contact}',
+                            style: GoogleFonts.manrope(
+                              fontSize: 12,
+                              color: AppColors.muted,
+                            ),
                           ),
-                        ),
-                        StatusPill(
-                          label: p.cadproStatus.label,
-                          tone: p.cadproStatus == CadproStatus.ativo
-                              ? PillTone.success
-                              : PillTone.warning,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        StatusPill(
-                          label: 'Total ${p.hectares.toStringAsFixed(0)} ha',
-                          tone: PillTone.neutral,
-                        ),
-                        for (final area in p.productionAreas)
-                          StatusPill(label: area.label, tone: PillTone.gold),
-                      ],
+                    StatusPill(
+                      label: s.active ? 'Ativo' : 'Inativo',
+                      tone: s.active ? PillTone.success : PillTone.neutral,
                     ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        TextButton(
-                          onPressed: () => onEditAreas(p),
-                          child: const Text('Editar produção'),
-                        ),
-                        TextButton(
-                          onPressed: () => onMoveGroup(p),
-                          child: const Text('Mudar grupo'),
-                        ),
-                      ],
+                    TextButton(
+                      onPressed: () => state.toggleSupplierActive(s.id),
+                      child: Text(s.active ? 'Desativar' : 'Ativar'),
                     ),
                   ],
                 ),

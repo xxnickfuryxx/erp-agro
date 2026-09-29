@@ -135,6 +135,61 @@ class MockData {
   static List<CatalogProduct> get exchangeableProducts => initialProducts();
   static List<Producer> get producers => initialProducers();
 
+  static List<Supplier> initialSuppliers() => [
+        Supplier(
+          id: 's1',
+          name: 'AgroSupply Multinacional',
+          cnpj: '00.111.222/0001-33',
+          contact: 'ricardo@agrosupply.com',
+          country: 'Brasil / Global',
+        ),
+        Supplier(
+          id: 's2',
+          name: 'CampoVerde Insumos',
+          cnpj: '55.666.777/0001-88',
+          contact: 'comercial@campoverde.com',
+          country: 'Brasil — Centro-Oeste',
+        ),
+      ];
+
+  static FeeConfig initialFeeConfig() => FeeConfig(
+        kgPerHa: 33,
+        defaultSeason: 'Safra 2026/27',
+        commodityLabel: 'soja',
+      );
+
+  /// Cotações base do letreiro (atualizadas com variação mock a cada 10 min).
+  static List<MarketQuote> initialMarketQuotes() => [
+        MarketQuote(
+          id: 'mq-soja',
+          label: 'SOJA',
+          unit: 'sc',
+          price: 128.50,
+          previousPrice: 127.80,
+        ),
+        MarketQuote(
+          id: 'mq-boi',
+          label: 'BOI GORDO',
+          unit: '@',
+          price: 312.40,
+          previousPrice: 314.10,
+        ),
+        MarketQuote(
+          id: 'mq-leite',
+          label: 'LEITE',
+          unit: 'L',
+          price: 2.48,
+          previousPrice: 2.45,
+        ),
+        MarketQuote(
+          id: 'mq-diesel',
+          label: 'DIESEL',
+          unit: 'L',
+          price: 5.89,
+          previousPrice: 5.92,
+        ),
+      ];
+
   static List<CarrierCompany> initialCarriers() => [
         CarrierCompany(
           id: 'c1',

@@ -5,10 +5,16 @@ import '../models/models.dart';
 
 class AppState extends ChangeNotifier {
   AppState() {
+    _bootstrap();
+  }
+
+  void _bootstrap() {
+    _feeConfig = MockData.initialFeeConfig();
     _producers = MockData.initialProducers();
     _groups = MockData.initialGroups();
     _productionTypes = MockData.initialProductionTypes();
     _products = MockData.initialProducts();
+    _suppliers = MockData.initialSuppliers();
     _stock = MockData.initialStock();
     _needs = MockData.initialNeeds();
     _lots = MockData.initialLots();
@@ -20,15 +26,41 @@ class AppState extends ChangeNotifier {
     _replenishments = MockData.initialReplenishments();
     _settlements = MockData.initialSettlements();
     _feeCharges = MockData.initialFeeCharges();
+    _marketQuotes = MockData.initialMarketQuotes();
+    _marketQuotesUpdatedAt = DateTime.now();
+    _consumptions.clear();
+    _activity
+      ..clear()
+      ..addAll([
+        'Sistema iniciado — ambiente de demonstração mock.',
+        'Lote LOTE-2026-014 em cotação junto à AgroSupply.',
+        'Alerta: stock de diesel do Sítio Boa Vista abaixo do mínimo.',
+        'Regra ativa: trocas só entre produtores do mesmo grupo; frete pago por quem pede.',
+        'Cadastros: módulo CADPRO — produtores, tipos, produtos, fornecedores e grupos.',
+        'Demo: OC-REP-1000 pendente (Juliana → repor diesel de Carlos).',
+        'Demo: LOTE-2026-011 liquidado; LOTE-2026-009 aguarda liquidação.',
+      ]);
+  }
+
+  /// Reinicia todos os dados mock (útil após cenários de demo).
+  void resetDemo() {
+    final user = currentUser;
+    _bootstrap();
+    currentUser = user;
+    authError = null;
+    _pushActivity('Demo reiniciada — dados seed restaurados.');
+    notifyListeners();
   }
 
   DemoUser? currentUser;
   String? authError;
 
+  late FeeConfig _feeConfig;
   late List<Producer> _producers;
   late List<FarmerGroup> _groups;
   late List<ProductionTypeDef> _productionTypes;
   late List<CatalogProduct> _products;
+  late List<Supplier> _suppliers;
   late List<StockItem> _stock;
   late List<NeedLine> _needs;
   late List<PurchaseLot> _lots;
@@ -40,18 +72,13 @@ class AppState extends ChangeNotifier {
   late List<ReplenishmentOrder> _replenishments;
   late List<FinancialSettlement> _settlements;
   late List<FeeCharge> _feeCharges;
+  late List<MarketQuote> _marketQuotes;
+  DateTime? _marketQuotesUpdatedAt;
   final List<ConsumptionLog> _consumptions = [];
-  final List<String> _activity = [
-    'Sistema iniciado — ambiente de demonstração mock.',
-    'Lote LOTE-2026-014 em cotação junto à AgroSupply.',
-    'Alerta: stock de diesel do Sítio Boa Vista abaixo do mínimo.',
-    'Regra ativa: trocas só entre produtores do mesmo grupo; frete pago por quem pede.',
-    'Cadastros: módulo CADPRO — produtores, tipos de produção, produtos e grupos.',
-    'Demo: OC-REP-1000 pendente (Juliana → repor diesel de Carlos).',
-    'Demo: LOTE-2026-011 liquidado; LOTE-2026-009 aguarda liquidação.',
-  ];
+  final List<String> _activity = [];
 
   List<DemoUser> get users => MockData.users;
+  FeeConfig get feeConfig => _feeConfig;
   List<Producer> get producers => List.unmodifiable(_producers);
   List<FarmerGroup> get groups => List.unmodifiable(_groups);
   List<ProductionTypeDef> get productionTypes =>
@@ -59,6 +86,9 @@ class AppState extends ChangeNotifier {
   List<ProductionTypeDef> get activeProductionTypes =>
       _productionTypes.where((t) => t.active).toList();
   List<CatalogProduct> get products => List.unmodifiable(_products);
+  List<Supplier> get suppliers => List.unmodifiable(_suppliers);
+  List<Supplier> get activeSuppliers =>
+      _suppliers.where((s) => s.active).toList();
   List<ExchangeableProduct> get exchangeableProducts => products;
   List<StockItem> get stock => List.unmodifiable(_stock);
   List<NeedLine> get needs => List.unmodifiable(_needs);
@@ -76,6 +106,8 @@ class AppState extends ChangeNotifier {
   List<FeeCharge> get feeCharges => List.unmodifiable(_feeCharges);
   List<ConsumptionLog> get consumptions => List.unmodifiable(_consumptions);
   List<String> get activity => List.unmodifiable(_activity);
+  List<MarketQuote> get marketQuotes => List.unmodifiable(_marketQuotes);
+  DateTime? get marketQuotesUpdatedAt => _marketQuotesUpdatedAt;
 
   bool get isLoggedIn => currentUser != null;
 
@@ -106,6 +138,13 @@ class AppState extends ChangeNotifier {
   CatalogProduct? productById(String id) {
     for (final p in _products) {
       if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  Supplier? supplierById(String id) {
+    for (final s in _suppliers) {
+      if (s.id == id) return s;
     }
     return null;
   }
@@ -144,7 +183,26 @@ class AppState extends ChangeNotifier {
     return a.groupId == b.groupId;
   }
 
-  double managementFeeFor(Producer p) => p.managementFeeKg;
+  double managementFeeFor(Producer p) =>
+      p.managementFeeKg(kgPerHa: _feeConfig.kgPerHa);
+
+  void updateFeeConfig({
+    double? kgPerHa,
+    String? defaultSeason,
+    String? commodityLabel,
+  }) {
+    if (kgPerHa != null && kgPerHa > 0) _feeConfig.kgPerHa = kgPerHa;
+    if (defaultSeason != null && defaultSeason.trim().isNotEmpty) {
+      _feeConfig.defaultSeason = defaultSeason.trim();
+    }
+    if (commodityLabel != null && commodityLabel.trim().isNotEmpty) {
+      _feeConfig.commodityLabel = commodityLabel.trim();
+    }
+    _pushActivity(
+      'Parâmetros de taxa atualizados: ${_feeConfig.formulaLabel}.',
+    );
+    notifyListeners();
+  }
 
   List<ReplenishmentOrder> get openReplenishments => _replenishments
       .where((r) => r.status != ReplenishmentStatus.entregueAoDoador)
@@ -167,7 +225,7 @@ class AppState extends ChangeNotifier {
     if (p == null) return;
     p.harvestMode = mode;
     _pushActivity(
-      '${p.farm}: modo de safra → ${mode.label} (taxa ${p.managementFeeKg.toStringAsFixed(0)} kg).',
+      '${p.farm}: modo de safra → ${mode.label} (taxa ${managementFeeFor(p).toStringAsFixed(0)} kg).',
     );
     notifyListeners();
   }
@@ -225,20 +283,193 @@ class AppState extends ChangeNotifier {
     required String name,
     required String unit,
     String category = 'Insumo',
+    double defaultMinThreshold = 1,
   }) {
     final product = CatalogProduct(
       id: 'ins-${DateTime.now().millisecondsSinceEpoch}',
       name: name.trim(),
       unit: unit.trim(),
       category: category.trim().isEmpty ? 'Insumo' : category.trim(),
+      defaultMinThreshold: defaultMinThreshold,
     );
     _products.insert(0, product);
+    for (final producer in _producers) {
+      final exists = _stock.any(
+        (s) => s.producerId == producer.id && s.productId == product.id,
+      );
+      if (!exists) {
+        _stock.add(
+          StockItem(
+            producerId: producer.id,
+            productId: product.id,
+            productName: product.name,
+            unit: product.unit,
+            quantity: 0,
+            minThreshold: product.defaultMinThreshold,
+          ),
+        );
+      }
+    }
     _pushActivity(
-      'Produto cadastrado: ${product.name} (${product.unit}). Disponível em compras e trocas.',
+      'Insumo cadastrado: ${product.name} (${product.unit}) · stock criado em ${_producers.length} fazenda(s).',
     );
     notifyListeners();
     return product;
   }
+
+  void updateProduct({
+    required String productId,
+    String? name,
+    String? unit,
+    String? category,
+    double? defaultMinThreshold,
+  }) {
+    final product = productById(productId);
+    if (product == null) return;
+    if (name != null && name.trim().isNotEmpty) product.name = name.trim();
+    if (unit != null && unit.trim().isNotEmpty) product.unit = unit.trim();
+    if (category != null) product.category = category.trim();
+    if (defaultMinThreshold != null && defaultMinThreshold > 0) {
+      product.defaultMinThreshold = defaultMinThreshold;
+    }
+    for (final s in _stock.where((s) => s.productId == productId)) {
+      s.productName = product.name;
+    }
+    _pushActivity('Insumo atualizado: ${product.name}.');
+    notifyListeners();
+  }
+
+  void updateStockThreshold({
+    required String producerId,
+    required String productId,
+    required double minThreshold,
+  }) {
+    if (minThreshold < 0) return;
+    for (final s in _stock) {
+      if (s.producerId == producerId && s.productId == productId) {
+        s.minThreshold = minThreshold;
+        _pushActivity(
+          'Limite mínimo atualizado: ${s.productName} em ${producerById(producerId)?.farm}.',
+        );
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  Supplier registerSupplier({
+    required String name,
+    required String cnpj,
+    required String contact,
+    required String country,
+  }) {
+    final supplier = Supplier(
+      id: 's-${DateTime.now().millisecondsSinceEpoch}',
+      name: name.trim(),
+      cnpj: cnpj.trim(),
+      contact: contact.trim(),
+      country: country.trim().isEmpty ? 'Brasil' : country.trim(),
+    );
+    _suppliers.insert(0, supplier);
+    _pushActivity('Fornecedor cadastrado: ${supplier.name}.');
+    notifyListeners();
+    return supplier;
+  }
+
+  void toggleSupplierActive(String supplierId) {
+    final s = supplierById(supplierId);
+    if (s == null) return;
+    s.active = !s.active;
+    _pushActivity(
+      '${s.name} marcado como ${s.active ? 'ativo' : 'inativo'}.',
+    );
+    notifyListeners();
+  }
+
+  void updateGroup({
+    required String groupId,
+    String? name,
+    String? region,
+    String? description,
+  }) {
+    final g = groupById(groupId);
+    if (g == null) return;
+    if (name != null && name.trim().isNotEmpty) g.name = name.trim();
+    if (region != null) g.region = region.trim();
+    if (description != null) g.description = description.trim();
+    for (final p in _producers.where((p) => p.groupId == groupId)) {
+      p.groupName = g.name;
+    }
+    _pushActivity('Grupo atualizado: ${g.name}.');
+    notifyListeners();
+  }
+
+  void updateClient({
+    required String producerId,
+    String? name,
+    String? farm,
+    String? cadproCode,
+    String? document,
+    String? car,
+    String? municipality,
+    String? stateUf,
+    String? phone,
+    String? email,
+    double? hectares,
+    HarvestMode? harvestMode,
+    CadproStatus? status,
+  }) {
+    final p = producerById(producerId);
+    if (p == null) return;
+    if (cadproCode != null && cadproCode.trim().isNotEmpty) {
+      final code = cadproCode.trim();
+      final clash = _producers.any(
+        (o) =>
+            o.id != producerId &&
+            o.cadproCode.toLowerCase() == code.toLowerCase(),
+      );
+      if (clash) {
+        _pushActivity('CADPRO: nº $code já em uso.');
+        notifyListeners();
+        return;
+      }
+      p.cadproCode = code;
+    }
+    if (name != null && name.trim().isNotEmpty) p.name = name.trim();
+    if (farm != null && farm.trim().isNotEmpty) p.farm = farm.trim();
+    if (document != null) p.document = document.trim();
+    if (car != null) p.car = car.trim();
+    if (municipality != null) p.municipality = municipality.trim();
+    if (stateUf != null) p.stateUf = stateUf.trim().toUpperCase();
+    if (phone != null) p.phone = phone.trim();
+    if (email != null) p.email = email.trim();
+    if (hectares != null && hectares > 0) {
+      p.hectares = hectares;
+      p.productionSize = ProductionSizeX.fromHectares(hectares);
+    }
+    if (harvestMode != null) p.harvestMode = harvestMode;
+    if (status != null) p.cadproStatus = status;
+    _pushActivity('CADPRO ${p.cadproCode} atualizado (${p.farm}).');
+    notifyListeners();
+  }
+
+  void advanceShipmentStatus(String shipmentId) {
+    for (final sh in _shipments) {
+      if (sh.id != shipmentId) continue;
+      sh.status = switch (sh.status) {
+        'Agendado' || 'Aguardando coleta' => 'Em rota',
+        'Em rota' => 'Concluído',
+        _ => sh.status,
+      };
+      _pushActivity('Frete ${sh.productName}: status → ${sh.status}.');
+      notifyListeners();
+      return;
+    }
+  }
+
+  String defaultSupplierName() => activeSuppliers.isNotEmpty
+      ? activeSuppliers.first.name
+      : 'AgroSupply Multinacional';
 
   Producer registerClient({
     required String name,
@@ -474,7 +705,7 @@ class AppState extends ChangeNotifier {
       productName: productName,
       quantity: quantity,
       unit: unit,
-      supplierName: 'AgroSupply Multinacional',
+      supplierName: defaultSupplierName(),
       status: DirectOrderStatus.enviado,
       carrierId: carrier?.id,
       carrierName: carrier?.name,
@@ -614,7 +845,7 @@ class AppState extends ChangeNotifier {
       unit: unit,
       participantIds: participants,
       status: LotStatus.consolidado,
-      supplierName: 'AgroSupply Multinacional',
+      supplierName: defaultSupplierName(),
     );
     _lots.insert(0, lot);
     _needs.removeWhere(
@@ -976,7 +1207,7 @@ class AppState extends ChangeNotifier {
       productName: donorStock.productName,
       quantity: quantity,
       unit: donorStock.unit,
-      supplierName: 'AgroSupply Multinacional',
+      supplierName: defaultSupplierName(),
       status: DirectOrderStatus.enviado,
       carrierId: carrier?.id,
       carrierName: carrier?.name,
@@ -1064,18 +1295,21 @@ class AppState extends ChangeNotifier {
   /// Cobrança efetiva da taxa de gestão (passo 17 UML).
   FeeCharge chargeManagementFee({
     required String producerId,
-    String season = 'Safra 2026/27',
+    String? season,
     HarvestMode? harvestMode,
   }) {
     final producer = producerById(producerId)!;
     if (harvestMode != null) {
       producer.harvestMode = harvestMode;
     }
-    final kg = producer.managementFeeKg;
+    final kg = managementFeeFor(producer);
+    final seasonLabel = (season == null || season.trim().isEmpty)
+        ? _feeConfig.defaultSeason
+        : season.trim();
     final charge = FeeCharge(
       id: 'fee-${DateTime.now().millisecondsSinceEpoch}',
       producerId: producerId,
-      season: season,
+      season: seasonLabel,
       harvestMode: producer.harvestMode,
       hectares: producer.hectares,
       kgCharged: kg,
@@ -1084,24 +1318,25 @@ class AppState extends ChangeNotifier {
     );
     _feeCharges.insert(0, charge);
     _pushActivity(
-      'Taxa cobrada: ${producer.farm} · ${kg.toStringAsFixed(0)} kg soja '
-      '(${producer.hectares.toStringAsFixed(0)} ha × 33 × ${producer.harvestMode.feeMultiplier.toStringAsFixed(0)}) · $season.',
+      'Taxa cobrada: ${producer.farm} · ${kg.toStringAsFixed(0)} kg ${_feeConfig.commodityLabel} '
+      '(${producer.hectares.toStringAsFixed(0)} ha × ${_feeConfig.kgPerHa.toStringAsFixed(0)} × ${producer.harvestMode.feeMultiplier.toStringAsFixed(0)}) · $seasonLabel.',
     );
     notifyListeners();
     return charge;
   }
 
-  int chargeAllManagementFees({String season = 'Safra 2026/27'}) {
+  int chargeAllManagementFees({String? season}) {
+    final seasonLabel = season ?? _feeConfig.defaultSeason;
     var count = 0;
     for (final p in _producers) {
       final already = _feeCharges.any(
         (f) =>
             f.producerId == p.id &&
-            f.season == season &&
+            f.season == seasonLabel &&
             f.status == FeeChargeStatus.cobrada,
       );
       if (already) continue;
-      chargeManagementFee(producerId: p.id, season: season);
+      chargeManagementFee(producerId: p.id, season: seasonLabel);
       count++;
     }
     return count;
@@ -1215,6 +1450,21 @@ class AppState extends ChangeNotifier {
     final a = chargeManagementFee(producerId: 'p-a');
     final b = chargeManagementFee(producerId: 'p-b');
     return 'Cenário OK: taxas cobradas — Horizonte ${a.kgCharged.toStringAsFixed(0)} kg · Boa Vista ${b.kgCharged.toStringAsFixed(0)} kg.';
+  }
+
+  /// Atualiza cotações do letreiro com variação mock (± até ~1,5%).
+  void refreshMarketQuotes() {
+    final rnd = DateTime.now().millisecondsSinceEpoch;
+    for (var i = 0; i < _marketQuotes.length; i++) {
+      final q = _marketQuotes[i];
+      q.previousPrice = q.price;
+      // variação determinística leve baseada no tempo + índice
+      final factor = 1 + ((((rnd ~/ 1000) + i * 17) % 31) - 15) / 1000.0;
+      q.price = double.parse((q.price * factor).toStringAsFixed(3));
+      if (q.price < 0.01) q.price = 0.01;
+    }
+    _marketQuotesUpdatedAt = DateTime.now();
+    notifyListeners();
   }
 
   void _pushActivity(String message) {

@@ -105,11 +105,25 @@ class LogisticsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    StatusPill(
-                      label: s.status,
-                      tone: s.type == 'transferencia'
-                          ? PillTone.gold
-                          : PillTone.info,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        StatusPill(
+                          label: s.status,
+                          tone: s.type == 'transferencia'
+                              ? PillTone.gold
+                              : PillTone.info,
+                        ),
+                        if (s.status != 'Concluído' &&
+                            (role.canManageEcosystem ||
+                                role == UserRole.transportadora ||
+                                role.isAdmin))
+                          TextButton(
+                            onPressed: () =>
+                                state.advanceShipmentStatus(s.id),
+                            child: const Text('Avançar status'),
+                          ),
+                      ],
                     ),
                   ],
                 ),

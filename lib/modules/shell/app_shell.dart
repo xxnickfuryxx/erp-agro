@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/models/models.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/market_ticker.dart';
 import 'dashboard_screen.dart';
 import '../fees/fees_screen.dart';
 import '../producer/producer_screen.dart';
@@ -11,6 +12,7 @@ import '../logistics/logistics_screen.dart';
 import '../purchases/purchases_screen.dart';
 import '../stock/stock_screen.dart';
 import '../network/transfers_screen.dart';
+import '../reports/reports_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.state});
@@ -47,6 +49,7 @@ class _AppShellState extends State<AppShell> {
         _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),
         _NavItem('Stock', Icons.inventory_2_outlined, (s) => StockScreen(state: s)),
         _NavItem('Taxas', Icons.payments_outlined, (s) => FeesScreen(state: s)),
+        _NavItem('Relatórios', Icons.assessment_outlined, (s) => ReportsScreen(state: s)),
       ];
     }
 
@@ -56,6 +59,7 @@ class _AppShellState extends State<AppShell> {
       case UserRole.produtor:
         return [
           ...common,
+          _NavItem('Minha fazenda', Icons.badge_outlined, (s) => ProducerScreen(state: s, myFarmOnly: true)),
           _NavItem('Compras', Icons.shopping_bag_outlined, (s) => PurchasesScreen(state: s)),
           _NavItem('Stock', Icons.inventory_2_outlined, (s) => StockScreen(state: s)),
           _NavItem('Empréstimos', Icons.swap_horiz_rounded, (s) => TransfersScreen(state: s)),
@@ -70,6 +74,7 @@ class _AppShellState extends State<AppShell> {
           _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),
           _NavItem('Stock', Icons.inventory_2_outlined, (s) => StockScreen(state: s)),
           _NavItem('Taxas', Icons.payments_outlined, (s) => FeesScreen(state: s)),
+          _NavItem('Relatórios', Icons.assessment_outlined, (s) => ReportsScreen(state: s)),
         ];
       case UserRole.fornecedor:
         return [
@@ -116,6 +121,7 @@ class _AppShellState extends State<AppShell> {
               child: Column(
                 children: [
                   _TopBar(user: user, state: widget.state),
+                  MarketQuotesTicker(state: widget.state),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
@@ -141,9 +147,16 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: body,
+      body: Column(
+        children: [
+          MarketQuotesTicker(state: widget.state),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: body,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

@@ -167,9 +167,9 @@ class _ProducerDashboard extends StatelessWidget {
           ),
           MetricCard(
             label: 'Taxa de gestão',
-            value: '${p.managementFeeKg.toStringAsFixed(0)} kg',
+            value: '${state.managementFeeFor(p).toStringAsFixed(0)} kg',
             icon: Icons.grass,
-            subtitle: 'Soja / ano (33 kg/ha)',
+            subtitle: state.feeConfig.formulaLabel,
             accent: AppColors.gold,
           ),
           MetricCard(
@@ -196,7 +196,7 @@ class _AdminDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final feeTotal =
-        state.producers.fold<double>(0, (a, p) => a + p.managementFeeKg);
+        state.producers.fold<double>(0, (a, p) => a + state.managementFeeFor(p));
 
     return ListView(
       children: [
@@ -270,7 +270,7 @@ class _ManagerDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final feeTotal =
-        state.producers.fold<double>(0, (a, p) => a + p.managementFeeKg);
+        state.producers.fold<double>(0, (a, p) => a + state.managementFeeFor(p));
 
     return ListView(
       children: [
@@ -452,8 +452,22 @@ class _DemoScenariosPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Executa sequências prontas para demonstrar as fases: liquidação, reposição e taxa.',
+            'Executa sequências prontas. Use “Reset demo” para restaurar os dados seed.',
             style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                state.resetDemo();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Demo reiniciada.')),
+                );
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reset demo'),
+            ),
           ),
           const SizedBox(height: 14),
           ...DemoScenarioId.values.map((id) {

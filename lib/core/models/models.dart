@@ -268,8 +268,8 @@ class Producer {
   }) : registeredAt = registeredAt ?? DateTime.now();
 
   final String id;
-  final String name;
-  final String farm;
+  String name;
+  String farm;
 
   /// Área total da fazenda (ha).
   double hectares;
@@ -335,9 +335,9 @@ class Producer {
   bool produces(String typeId) =>
       productionAreas.any((a) => a.typeId == typeId);
 
-  /// Taxa: 33 kg soja / ha total administrado × multiplicador da safra.
-  double get managementFeeKg =>
-      hectares * 33 * harvestMode.feeMultiplier;
+  /// Taxa: kg soja / ha × multiplicador da safra (kg/ha vem da config do ERP).
+  double managementFeeKg({double kgPerHa = 33}) =>
+      hectares * kgPerHa * harvestMode.feeMultiplier;
 }
 
 class FarmerGroup {
@@ -349,8 +349,8 @@ class FarmerGroup {
   });
 
   final String id;
-  final String name;
-  final String region;
+  String name;
+  String region;
   String description;
 }
 
@@ -360,12 +360,49 @@ class CatalogProduct {
     required this.name,
     required this.unit,
     this.category = 'Insumo',
+    this.defaultMinThreshold = 1,
   });
 
   final String id;
-  final String name;
-  final String unit;
-  final String category;
+  String name;
+  String unit;
+  String category;
+  double defaultMinThreshold;
+}
+
+/// Fornecedor multinacional / regional (cadastro ERP).
+class Supplier {
+  Supplier({
+    required this.id,
+    required this.name,
+    required this.cnpj,
+    required this.contact,
+    required this.country,
+    this.active = true,
+  });
+
+  final String id;
+  String name;
+  String cnpj;
+  String contact;
+  String country;
+  bool active;
+}
+
+/// Parâmetros configuráveis da taxa de gestão.
+class FeeConfig {
+  FeeConfig({
+    this.kgPerHa = 33,
+    this.defaultSeason = 'Safra 2026/27',
+    this.commodityLabel = 'soja',
+  });
+
+  double kgPerHa;
+  String defaultSeason;
+  String commodityLabel;
+
+  String get formulaLabel =>
+      'ha × ${kgPerHa.toStringAsFixed(0)} kg $commodityLabel × multiplicador de safra';
 }
 
 class CarrierCompany {
@@ -400,10 +437,10 @@ class StockItem {
 
   final String producerId;
   final String productId;
-  final String productName;
+  String productName;
   final String unit;
   double quantity;
-  final double minThreshold;
+  double minThreshold;
 
   bool get isRupture => quantity <= minThreshold;
   bool get isLow => quantity <= minThreshold * 1.5 && !isRupture;
@@ -632,6 +669,43 @@ class FeeCharge {
   final double kgCharged;
   FeeChargeStatus status;
   DateTime? chargedAt;
+}
+
+/// Cotação de mercado para o letreiro do header (mock atualizado periodicamente).
+class MarketQuote {
+  MarketQuote({
+    required this.id,
+    required this.label,
+    required this.unit,
+    required this.price,
+    required this.previousPrice,
+    this.currency = 'R\$',
+  });
+
+  final String id;
+  final String label;
+  final String unit;
+  double price;
+  double previousPrice;
+  final String currency;
+
+  double get changePct => previousPrice == 0
+      ? 0
+      : ((price - previousPrice) / previousPrice) * 100;
+
+  bool get isUp => price >= previousPrice;
+
+  String get formattedPrice {
+    if (price >= 100) return price.toStringAsFixed(2);
+    if (price >= 10) return price.toStringAsFixed(2);
+    return price.toStringAsFixed(3);
+  }
+
+  String get tickerText {
+    final arrow = isUp ? '▲' : '▼';
+    final sign = changePct >= 0 ? '+' : '';
+    return '$label $currency $formattedPrice/$unit $arrow $sign${changePct.toStringAsFixed(2)}%';
+  }
 }
 
 class ConsumptionLog {
