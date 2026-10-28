@@ -5,6 +5,7 @@ import '../../core/models/models.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/purchase_economy.dart';
 
 /// Relatórios operacionais para demo com investidores.
 class ReportsScreen extends StatelessWidget {
@@ -33,8 +34,26 @@ class ReportsScreen extends StatelessWidget {
       children: [
         const SectionHeader(
           title: 'Relatórios',
-          subtitle:
-              'Visão consolidada — taxas, compras, rede de empréstimos e armazém',
+          subtitle: 'Indicadores · detalhe do pool em Compras',
+        ),
+        const SizedBox(height: 16),
+        ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: EdgeInsets.zero,
+          title: Text(
+            'Pool e economia da safra',
+            style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+          ),
+          children: [
+            PurchasePoolPanel(state: state),
+            const SizedBox(height: 12),
+            if (state.producers.isNotEmpty)
+              CropEconomicsPanel(
+                state: state,
+                producerId:
+                    state.currentProducer?.id ?? state.producers.first.id,
+              ),
+          ],
         ),
         const SizedBox(height: 16),
         LayoutBuilder(

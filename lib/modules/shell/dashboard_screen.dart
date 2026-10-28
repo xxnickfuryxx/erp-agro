@@ -5,6 +5,7 @@ import '../../core/models/models.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/purchase_economy.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, required this.state});
@@ -40,7 +41,7 @@ class _FlowBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Fluxo operacional (UML)',
+            'Como usar (simples)',
             style: GoogleFonts.manrope(
               color: AppColors.goldSoft,
               fontWeight: FontWeight.w700,
@@ -49,11 +50,13 @@ class _FlowBanner extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Programação → Lote → Cotação → Aprovação → Faturação → Liquidação → Trânsito → Armazém → JIT → Consumo → Rutura → Empréstimo → OC-REP → Taxa',
+            '1. CADPRO — cadastre fazenda e insumos\n'
+            '2. Compras → Incluir no pool — diga o que precisa comprar\n'
+            '3. Compras → Lotes — consolide e acompanhe a negociação',
             style: GoogleFonts.manrope(
               color: Colors.white,
               fontWeight: FontWeight.w600,
-              height: 1.4,
+              height: 1.45,
             ),
           ),
           const SizedBox(height: 14),
@@ -61,13 +64,9 @@ class _FlowBanner extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              FlowStepChip(index: 1, label: 'Necessidades', active: true),
-              FlowStepChip(index: 2, label: 'Consolidação'),
-              FlowStepChip(index: 3, label: 'Fornecedor'),
-              FlowStepChip(index: 4, label: 'Liquidação'),
-              FlowStepChip(index: 5, label: 'Armazém JIT'),
-              FlowStepChip(index: 6, label: 'Empréstimo'),
-              FlowStepChip(index: 7, label: 'Taxa'),
+              FlowStepChip(index: 1, label: 'CADPRO', active: true),
+              FlowStepChip(index: 2, label: 'Pool'),
+              FlowStepChip(index: 3, label: 'Lote'),
             ],
           ),
         ],
@@ -146,10 +145,22 @@ class _ProducerDashboard extends StatelessWidget {
         SectionHeader(
           title: 'Painel do produtor',
           subtitle:
-              '${p.farm} · ${p.groupName} · ${p.focus} · Porte ${p.productionSize.label} · ${p.hectares.toStringAsFixed(0)} ha · ${p.cadproCode}',
+              '${p.farm} · ${p.hectares.toStringAsFixed(0)} ha · ${p.cadproCode}',
         ),
         const SizedBox(height: 16),
-        _FlowBanner(),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.forest.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: Text(
+            'Para comprar insumos: abra Compras → Incluir no pool. '
+            'Compra urgente só se não puder esperar o lote.',
+            style: GoogleFonts.manrope(fontSize: 13, height: 1.4),
+          ),
+        ),
         const SizedBox(height: 16),
         _metricsRow([
           MetricCard(
@@ -160,10 +171,19 @@ class _ProducerDashboard extends StatelessWidget {
             accent: ruptures > 0 ? AppColors.danger : AppColors.success,
           ),
           MetricCard(
-            label: 'Necessidades',
+            label: 'No pool',
             value: '$needs',
             icon: Icons.playlist_add_check_circle_outlined,
-            subtitle: 'Planeadas e diretas',
+            subtitle: 'Necessidades programadas',
+          ),
+          MetricCard(
+            label: 'Pool R\$/ha',
+            value:
+                'R\$ ${state.poolAverageRsPerHa(producerId: p.id).toStringAsFixed(0)}',
+            icon: Icons.analytics_outlined,
+            subtitle:
+                'Total R\$ ${state.poolTotalSpend(producerId: p.id).toStringAsFixed(0)}',
+            accent: AppColors.gold,
           ),
           MetricCard(
             label: 'Taxa de gestão',
@@ -172,14 +192,19 @@ class _ProducerDashboard extends StatelessWidget {
             subtitle: state.feeConfig.formulaLabel,
             accent: AppColors.gold,
           ),
-          MetricCard(
-            label: 'Empréstimos',
-            value: '${state.transfers.where((t) => t.toProducerId == p.id || t.fromProducerId == p.id).length}',
-            icon: Icons.swap_horiz,
-            subtitle: 'Rede lateral',
-          ),
         ]),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: Text(
+            'Economia da safra',
+            style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+          ),
+          children: [
+            CropEconomicsPanel(state: state, producerId: p.id),
+          ],
+        ),
+        const SizedBox(height: 16),
         const SectionHeader(title: 'Atividade recente'),
         const SizedBox(height: 12),
         _ActivityList(state: state),
@@ -202,22 +227,7 @@ class _AdminDashboard extends StatelessWidget {
       children: [
         const SectionHeader(
           title: 'Painel do administrador',
-          subtitle:
-              'Acesso total: clientes, compras, logística, rede de trocas, stock e taxas',
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.goldSoft.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
-          ),
-          child: Text(
-            'Perfil com permissão completa sobre o ecossistema ERP Agro. '
-            'Pode operar fluxos de gestora, fornecedor e monitorizar todos os produtores.',
-            style: GoogleFonts.manrope(fontSize: 13, height: 1.4),
-          ),
+          subtitle: 'Comece pelo guia abaixo · depois use Compras → Pool',
         ),
         const SizedBox(height: 16),
         _FlowBanner(),
@@ -225,6 +235,15 @@ class _AdminDashboard extends StatelessWidget {
         _DemoScenariosPanel(state: state),
         const SizedBox(height: 16),
         _metricsRow([
+          MetricCard(
+            label: 'Pool (total)',
+            value:
+                'R\$ ${state.poolTotalSpend().toStringAsFixed(0)}',
+            icon: Icons.shopping_bag_outlined,
+            subtitle:
+                'Média R\$ ${state.poolAverageRsPerHa().toStringAsFixed(0)}/ha',
+            accent: AppColors.gold,
+          ),
           MetricCard(
             label: 'Utilizadores demo',
             value: '${state.users.length}',
@@ -276,7 +295,7 @@ class _ManagerDashboard extends StatelessWidget {
       children: [
         const SectionHeader(
           title: 'Central da gestora',
-          subtitle: 'Orquestração de lotes, armazém de retaguarda e rede de empréstimos',
+          subtitle: 'CADPRO → Compras (pool) → Lotes → Logística',
         ),
         const SizedBox(height: 16),
         _FlowBanner(),
@@ -293,10 +312,11 @@ class _ManagerDashboard extends StatelessWidget {
             accent: AppColors.info,
           ),
           MetricCard(
-            label: 'Transportadoras',
-            value: '${state.activeCarriers.length}',
-            icon: Icons.local_shipping_outlined,
-            subtitle: 'Logística terceirizada ativa',
+            label: 'Pool R\$/ha',
+            value: 'R\$ ${state.poolAverageRsPerHa().toStringAsFixed(0)}',
+            icon: Icons.analytics_outlined,
+            subtitle: 'Total R\$ ${state.poolTotalSpend().toStringAsFixed(0)}',
+            accent: AppColors.gold,
           ),
           MetricCard(
             label: 'Ruturas monitorizadas',

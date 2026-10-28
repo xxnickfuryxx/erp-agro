@@ -282,14 +282,18 @@ class AppState extends ChangeNotifier {
   CatalogProduct registerProduct({
     required String name,
     required String unit,
-    String category = 'Insumo',
+    PurchaseGroup purchaseGroup = PurchaseGroup.outros,
+    double refPriceReais = 0,
+    double dosePerHa = 0,
     double defaultMinThreshold = 1,
   }) {
     final product = CatalogProduct(
       id: 'ins-${DateTime.now().millisecondsSinceEpoch}',
       name: name.trim(),
       unit: unit.trim(),
-      category: category.trim().isEmpty ? 'Insumo' : category.trim(),
+      purchaseGroup: purchaseGroup,
+      refPriceReais: refPriceReais,
+      dosePerHa: dosePerHa,
       defaultMinThreshold: defaultMinThreshold,
     );
     _products.insert(0, product);
@@ -321,14 +325,20 @@ class AppState extends ChangeNotifier {
     required String productId,
     String? name,
     String? unit,
-    String? category,
+    PurchaseGroup? purchaseGroup,
+    double? refPriceReais,
+    double? dosePerHa,
     double? defaultMinThreshold,
   }) {
     final product = productById(productId);
     if (product == null) return;
     if (name != null && name.trim().isNotEmpty) product.name = name.trim();
     if (unit != null && unit.trim().isNotEmpty) product.unit = unit.trim();
-    if (category != null) product.category = category.trim();
+    if (purchaseGroup != null) product.purchaseGroup = purchaseGroup;
+    if (refPriceReais != null && refPriceReais >= 0) {
+      product.refPriceReais = refPriceReais;
+    }
+    if (dosePerHa != null && dosePerHa >= 0) product.dosePerHa = dosePerHa;
     if (defaultMinThreshold != null && defaultMinThreshold > 0) {
       product.defaultMinThreshold = defaultMinThreshold;
     }
@@ -665,7 +675,17 @@ class AppState extends ChangeNotifier {
     required double quantity,
     required String unit,
     required PurchaseMode mode,
+    DealPhase phase = DealPhase.negociacao,
+    double? unitPrice,
+    double? hectaresRef,
   }) {
+    final product = productById(productId);
+    final producer = producerById(producerId);
+    final price = unitPrice ?? product?.refPriceReais ?? 0;
+    final ha = hectaresRef ??
+        producer?.areaForType('pt-soja') ??
+        producer?.hectares ??
+        0;
     _needs.add(
       NeedLine(
         id: 'n-${DateTime.now().millisecondsSinceEpoch}',
@@ -675,12 +695,135 @@ class AppState extends ChangeNotifier {
         quantity: quantity,
         unit: unit,
         mode: mode,
+        phase: phase,
+        unitPrice: price,
+        hectaresRef: ha > 0 ? ha : null,
       ),
     );
     _pushActivity(
-      'Nova necessidade: $quantity $unit de $productName (${mode == PurchaseMode.planeada ? 'Planeada' : 'Direta'}).',
+      'Nova necessidade: $quantity $unit de $productName '
+      '(${mode == PurchaseMode.planeada ? 'Planeada' : 'Direta'} · ${phase.label}).',
     );
     notifyListeners();
+  }
+
+  void markNeedRealized(String needId) {
+    for (final n in _needs) {
+      if (n.id == needId) {
+        n.phase = DealPhase.realizada;
+        _pushActivity(
+          'Compra realizada: ${n.productName} · '
+          '${n.quantity.toStringAsFixed(0)} ${n.unit}.',
+        );
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  void setNeedPhase(String needId, DealPhase phase) {
+    for (final n in _needs) {
+      if (n.id == needId) {
+        n.phase = phase;
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Indicadores do pool de compras (R$/ha por grupo).
+  List<PurchaseGroupStat> purchasePoolIndicators({
+    String? producerId,
+    DealPhase? phase,
+  }) {
+    final lines = _needs.where((n) {
+      if (producerId != null && n.producerId != producerId) return false;
+      if (phase != null && n.phase != phase) return false;
+      return true;
+    });
+
+    final byGroup = <PurchaseGroup, _GroupAgg>{};
+    for (final n in lines) {
+      final product = productById(n.productId);
+      final group = product?.purchaseGroup ?? PurchaseGroup.outros;
+      final agg = byGroup.putIfAbsent(group, _GroupAgg.new);
+      agg.spend += n.totalSpend;
+      agg.qty += n.quantity;
+      agg.unit = n.unit;
+      agg.ha += n.hectaresRef ?? 0;
+      if (n.phase == DealPhase.negociacao) {
+        agg.neg++;
+      } else {
+        agg.real++;
+      }
+    }
+
+    final stats = <PurchaseGroupStat>[];
+    for (final entry in byGroup.entries) {
+      final a = entry.value;
+      stats.add(
+        PurchaseGroupStat(
+          group: entry.key,
+          totalSpend: a.spend,
+          hectares: a.ha,
+          quantity: a.qty,
+          unit: a.unit,
+          linesInNegotiation: a.neg,
+          linesRealized: a.real,
+        ),
+      );
+    }
+    stats.sort((a, b) => b.totalSpend.compareTo(a.totalSpend));
+    return stats;
+  }
+
+  double poolTotalSpend({String? producerId, DealPhase? phase}) =>
+      purchasePoolIndicators(producerId: producerId, phase: phase)
+          .fold<double>(0, (s, g) => s + g.totalSpend);
+
+  double poolAverageRsPerHa({String? producerId, DealPhase? phase}) {
+    final stats = purchasePoolIndicators(producerId: producerId, phase: phase);
+    final ha = stats.fold<double>(0, (s, g) => s + g.hectares);
+    final spend = stats.fold<double>(0, (s, g) => s + g.totalSpend);
+    if (ha <= 0) return 0;
+    // Evita somar ha duplicados por grupo: usa ha do produtor / soma ponderada.
+    final uniqueHa = producerId != null
+        ? (producerById(producerId)?.hectares ?? ha)
+        : _producers.fold<double>(0, (s, p) => s + p.hectares);
+    final basis = uniqueHa > 0 ? uniqueHa : ha;
+    return spend / basis;
+  }
+
+  /// Prévia frentes 2–3: custo de insumos vs cotação da commodity.
+  CropEconomicsSnapshot? cropEconomicsFor(
+    String producerId, {
+    String culture = 'Soja',
+    double assumedYieldScHa = 60,
+  }) {
+    final producer = producerById(producerId);
+    if (producer == null) return null;
+    final ha = culture.toLowerCase().contains('soja')
+        ? (producer.areaForType('pt-soja') ?? producer.hectares)
+        : producer.hectares;
+    if (ha <= 0) return null;
+
+    final inputCostPerHa = poolAverageRsPerHa(producerId: producerId);
+    double marketPrice = 128.50;
+    for (final q in _marketQuotes) {
+      if (q.id == 'mq-soja') {
+        marketPrice = q.price;
+        break;
+      }
+    }
+
+    return CropEconomicsSnapshot(
+      producerId: producerId,
+      culture: culture,
+      hectares: ha,
+      inputCostPerHa: inputCostPerHa,
+      marketPricePerSc: marketPrice,
+      assumedYieldScHa: assumedYieldScHa,
+    );
   }
 
   /// Compra direta JIT: ignora consolidação e vai ao fornecedor.
@@ -697,6 +840,8 @@ class AppState extends ChangeNotifier {
         ? carrierById(carrierId)
         : (activeCarriers.isNotEmpty ? activeCarriers.first : null);
 
+    final product = productById(productId);
+    final unitPrice = product?.refPriceReais ?? 0;
     final order = DirectPurchase(
       id: 'dp-${DateTime.now().millisecondsSinceEpoch}',
       code: 'DIR-2026-${100 + _directPurchases.length}',
@@ -707,6 +852,7 @@ class AppState extends ChangeNotifier {
       unit: unit,
       supplierName: defaultSupplierName(),
       status: DirectOrderStatus.enviado,
+      unitPrice: unitPrice,
       carrierId: carrier?.id,
       carrierName: carrier?.name,
     );
@@ -719,6 +865,8 @@ class AppState extends ChangeNotifier {
       quantity: quantity,
       unit: unit,
       mode: PurchaseMode.direta,
+      phase: DealPhase.realizada,
+      unitPrice: unitPrice,
     );
 
     if (carrier != null) {
@@ -1209,6 +1357,7 @@ class AppState extends ChangeNotifier {
       unit: donorStock.unit,
       supplierName: defaultSupplierName(),
       status: DirectOrderStatus.enviado,
+      unitPrice: productById(productId)?.refPriceReais ?? 0,
       carrierId: carrier?.id,
       carrierName: carrier?.name,
       isReplenishment: true,
@@ -1293,19 +1442,24 @@ class AppState extends ChangeNotifier {
   }
 
   /// Cobrança efetiva da taxa de gestão (passo 17 UML).
+  /// [kgOverride] permite taxa pré-acordada (desconto) sem mudar a regra geral.
   FeeCharge chargeManagementFee({
     required String producerId,
     String? season,
     HarvestMode? harvestMode,
+    double? kgOverride,
+    String? adjustmentNote,
   }) {
     final producer = producerById(producerId)!;
     if (harvestMode != null) {
       producer.harvestMode = harvestMode;
     }
-    final kg = managementFeeFor(producer);
+    final standard = managementFeeFor(producer);
+    final kg = (kgOverride != null && kgOverride >= 0) ? kgOverride : standard;
     final seasonLabel = (season == null || season.trim().isEmpty)
         ? _feeConfig.defaultSeason
         : season.trim();
+    final note = adjustmentNote?.trim();
     final charge = FeeCharge(
       id: 'fee-${DateTime.now().millisecondsSinceEpoch}',
       producerId: producerId,
@@ -1313,13 +1467,20 @@ class AppState extends ChangeNotifier {
       harvestMode: producer.harvestMode,
       hectares: producer.hectares,
       kgCharged: kg,
+      standardKg: standard,
+      adjustmentNote: (note == null || note.isEmpty) ? null : note,
       status: FeeChargeStatus.cobrada,
       chargedAt: DateTime.now(),
     );
     _feeCharges.insert(0, charge);
+    final personalized = charge.isPersonalized;
     _pushActivity(
-      'Taxa cobrada: ${producer.farm} · ${kg.toStringAsFixed(0)} kg ${_feeConfig.commodityLabel} '
-      '(${producer.hectares.toStringAsFixed(0)} ha × ${_feeConfig.kgPerHa.toStringAsFixed(0)} × ${producer.harvestMode.feeMultiplier.toStringAsFixed(0)}) · $seasonLabel.',
+      personalized
+          ? 'Taxa personalizada: ${producer.farm} · ${kg.toStringAsFixed(0)} kg '
+              '(padrão ${standard.toStringAsFixed(0)})'
+              '${charge.adjustmentNote != null ? ' · ${charge.adjustmentNote}' : ''} · $seasonLabel.'
+          : 'Taxa cobrada: ${producer.farm} · ${kg.toStringAsFixed(0)} kg ${_feeConfig.commodityLabel} '
+              '(${producer.hectares.toStringAsFixed(0)} ha × ${_feeConfig.kgPerHa.toStringAsFixed(0)} × ${producer.harvestMode.feeMultiplier.toStringAsFixed(0)}) · $seasonLabel.',
     );
     notifyListeners();
     return charge;
@@ -1473,4 +1634,13 @@ class AppState extends ChangeNotifier {
       _activity.removeRange(60, _activity.length);
     }
   }
+}
+
+class _GroupAgg {
+  double spend = 0;
+  double qty = 0;
+  double ha = 0;
+  String unit = '';
+  int neg = 0;
+  int real = 0;
 }

@@ -34,17 +34,22 @@ flutter run -d chrome
 | `fees` | Taxa configurável (kg/ha) + cobrança |
 | `reports` | Relatórios consolidados |
 
+## Uso rápido
+
+1. Login (`demo`) → Painel mostra o guia em 3 passos  
+2. **CADPRO** — nº identificador certifica o produtor (documento de classe); insumos ficam na aba do catálogo  
+3. **Compras → Incluir no pool** — informar quantidade por fazenda  
+4. **Compras → Lotes** — consolidar e acompanhar negociação  
+5. **Taxas → Cobrar taxa** — valor da regra geral já vem preenchido; dá para reduzir (desconto combinado) e confirmar  
+
 ## O que o mock cobre agora
 
-- CADPRO com Nº Identificador, edição, status, pesquisa
-- Tipos de produção dinâmicos + reservas de ha
-- **Cadastro de fornecedores**
-- **Parâmetros de taxa** (kg/ha, commodity, safra) editáveis
-- Insumos com sync de stock em todas as fazendas
-- Relatórios (taxa, lotes, rede, armazém)
-- Reset demo + cenários UML
-- Produtor vê **Minha fazenda**
-- Letreiro de cotações no header (soja, boi gordo, leite, diesel) atualizado a cada 10 min
+- CADPRO, tipos, insumos, fornecedores, grupos
+- Compras em abas: **Pool** | **Lotes** (ou Urgente para produtor)
+- Pool R\$/ha · negociação vs realizada
+- Logística, rede/empréstimos, stock, taxas, relatórios
+- Letreiro de cotações + prévia económica da safra
+- Cenários demo + reset
 
 ## Documentação
 

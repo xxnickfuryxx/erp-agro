@@ -114,6 +114,139 @@ extension CadproStatusX on CadproStatus {
 
 enum PurchaseMode { planeada, direta }
 
+/// Fase da compra no pool — negociação vs negócio fechado.
+enum DealPhase { negociacao, realizada }
+
+extension DealPhaseX on DealPhase {
+  String get label => switch (this) {
+        DealPhase.negociacao => 'Em negociação',
+        DealPhase.realizada => 'Compra realizada',
+      };
+}
+
+/// Grupos de compra agrícola (frente 1 — pool e indicadores R$/ha).
+enum PurchaseGroup {
+  fertBase,
+  fertCobertura,
+  sementes,
+  herbicidas,
+  fungicidas,
+  inseticidas,
+  nutricaoBio,
+  corretivos,
+  combustiveis,
+  fretes,
+  outros,
+}
+
+extension PurchaseGroupX on PurchaseGroup {
+  String get label => switch (this) {
+        PurchaseGroup.fertBase => 'Fertilizantes de base',
+        PurchaseGroup.fertCobertura => 'Fertilizantes de cobertura',
+        PurchaseGroup.sementes => 'Sementes',
+        PurchaseGroup.herbicidas => 'Herbicidas',
+        PurchaseGroup.fungicidas => 'Fungicidas',
+        PurchaseGroup.inseticidas => 'Inseticidas',
+        PurchaseGroup.nutricaoBio => 'Nutrição vegetal e biológicos',
+        PurchaseGroup.corretivos => 'Corretivos e condicionadores',
+        PurchaseGroup.combustiveis => 'Combustíveis',
+        PurchaseGroup.fretes => 'Fretes e logística',
+        PurchaseGroup.outros => 'Outros insumos',
+      };
+
+  String get shortLabel => switch (this) {
+        PurchaseGroup.fertBase => 'Fert. base',
+        PurchaseGroup.fertCobertura => 'Fert. cobertura',
+        PurchaseGroup.sementes => 'Sementes',
+        PurchaseGroup.herbicidas => 'Herbicidas',
+        PurchaseGroup.fungicidas => 'Fungicidas',
+        PurchaseGroup.inseticidas => 'Inseticidas',
+        PurchaseGroup.nutricaoBio => 'Nutrição / bio',
+        PurchaseGroup.corretivos => 'Corretivos',
+        PurchaseGroup.combustiveis => 'Combustíveis',
+        PurchaseGroup.fretes => 'Fretes',
+        PurchaseGroup.outros => 'Outros',
+      };
+
+  /// Indicadores principais sugeridos na reunião.
+  String get primaryKpi => switch (this) {
+        PurchaseGroup.fertBase ||
+        PurchaseGroup.fertCobertura =>
+          'R\$/ha e R\$/t',
+        PurchaseGroup.sementes => 'R\$/ha e R\$/un',
+        PurchaseGroup.combustiveis => 'R\$/ha e L/ha',
+        PurchaseGroup.fretes => 'R\$/t e R\$/ha',
+        _ => 'R\$/ha',
+      };
+
+  bool get tracksTon =>
+      this == PurchaseGroup.fertBase ||
+      this == PurchaseGroup.fertCobertura ||
+      this == PurchaseGroup.fretes;
+}
+
+/// Agregado de indicadores do pool por grupo de compra.
+class PurchaseGroupStat {
+  PurchaseGroupStat({
+    required this.group,
+    required this.totalSpend,
+    required this.hectares,
+    required this.quantity,
+    required this.unit,
+    required this.linesInNegotiation,
+    required this.linesRealized,
+  });
+
+  final PurchaseGroup group;
+  final double totalSpend;
+  final double hectares;
+  final double quantity;
+  final String unit;
+  final int linesInNegotiation;
+  final int linesRealized;
+
+  double get rsPerHa => hectares > 0 ? totalSpend / hectares : 0;
+
+  double? get rsPerTon {
+    if (!group.tracksTon) return null;
+    if (unit != 't' || quantity <= 0) return null;
+    return totalSpend / quantity;
+  }
+}
+
+/// Prévia das frentes 2 e 3 — custo da safra e margem vs cotação de mercado.
+class CropEconomicsSnapshot {
+  CropEconomicsSnapshot({
+    required this.producerId,
+    required this.culture,
+    required this.hectares,
+    required this.inputCostPerHa,
+    required this.marketPricePerSc,
+    required this.assumedYieldScHa,
+  });
+
+  final String producerId;
+  final String culture;
+  final double hectares;
+  final double inputCostPerHa;
+  final double marketPricePerSc;
+  final double assumedYieldScHa;
+
+  double get breakEvenScHa =>
+      marketPricePerSc > 0 ? inputCostPerHa / marketPricePerSc : 0;
+
+  double get costPerSc =>
+      assumedYieldScHa > 0 ? inputCostPerHa / assumedYieldScHa : 0;
+
+  double get projectedMarginPerHa =>
+      (assumedYieldScHa * marketPricePerSc) - inputCostPerHa;
+
+  double get returnOnCostPct =>
+      inputCostPerHa > 0 ? (projectedMarginPerHa / inputCostPerHa) * 100 : 0;
+
+  double get surplusScHa => assumedYieldScHa - breakEvenScHa;
+}
+
 enum LotStatus {
   programacao,
   consolidado,
@@ -335,6 +468,19 @@ class Producer {
   bool produces(String typeId) =>
       productionAreas.any((a) => a.typeId == typeId);
 
+  /// Hectares reservados a um tipo de produção (null se não houver).
+  double? areaForType(String typeId) {
+    double sum = 0;
+    var found = false;
+    for (final a in productionAreas) {
+      if (a.typeId == typeId) {
+        sum += a.hectares;
+        found = true;
+      }
+    }
+    return found ? sum : null;
+  }
+
   /// Taxa: kg soja / ha × multiplicador da safra (kg/ha vem da config do ERP).
   double managementFeeKg({double kgPerHa = 33}) =>
       hectares * kgPerHa * harvestMode.feeMultiplier;
@@ -359,15 +505,23 @@ class CatalogProduct {
     required this.id,
     required this.name,
     required this.unit,
-    this.category = 'Insumo',
+    this.purchaseGroup = PurchaseGroup.outros,
+    this.refPriceReais = 0,
+    this.dosePerHa = 0,
     this.defaultMinThreshold = 1,
   });
 
   final String id;
   String name;
   String unit;
-  String category;
+  PurchaseGroup purchaseGroup;
+  /// Preço de referência mock (R$ / unidade) para indicadores do pool.
+  double refPriceReais;
+  /// Dose típica por hectare (0 = não aplicável).
+  double dosePerHa;
   double defaultMinThreshold;
+
+  String get category => purchaseGroup.label;
 }
 
 /// Fornecedor multinacional / regional (cadastro ERP).
@@ -456,6 +610,9 @@ class NeedLine {
     required this.unit,
     required this.mode,
     this.season = 'Safra 2026/27',
+    this.phase = DealPhase.negociacao,
+    this.unitPrice = 0,
+    this.hectaresRef,
   });
 
   final String id;
@@ -466,6 +623,19 @@ class NeedLine {
   final String unit;
   PurchaseMode mode;
   final String season;
+  DealPhase phase;
+  /// R$ por unidade (referência ou preço negociado).
+  double unitPrice;
+  /// Hectares associados para calcular R$/ha.
+  double? hectaresRef;
+
+  double get totalSpend => quantity * unitPrice;
+
+  double? get rsPerHa {
+    final ha = hectaresRef;
+    if (ha == null || ha <= 0) return null;
+    return totalSpend / ha;
+  }
 }
 
 /// Compra direta (JIT) — ignora consolidação de lote.
@@ -480,6 +650,7 @@ class DirectPurchase {
     required this.unit,
     required this.supplierName,
     required this.status,
+    this.unitPrice = 0,
     this.carrierId,
     this.carrierName,
     this.isReplenishment = false,
@@ -496,6 +667,7 @@ class DirectPurchase {
   final String unit;
   final String supplierName;
   DirectOrderStatus status;
+  double unitPrice;
   String? carrierId;
   String? carrierName;
 
@@ -503,6 +675,8 @@ class DirectPurchase {
   final bool isReplenishment;
   final String? replenishmentOrderId;
   final String? stockDestinationProducerId;
+
+  double get totalSpend => quantity * unitPrice;
 }
 
 class PurchaseLot {
@@ -658,6 +832,8 @@ class FeeCharge {
     required this.hectares,
     required this.kgCharged,
     required this.status,
+    this.standardKg,
+    this.adjustmentNote,
     this.chargedAt,
   });
 
@@ -666,9 +842,17 @@ class FeeCharge {
   final String season;
   final HarvestMode harvestMode;
   final double hectares;
+  /// Valor efetivamente cobrado (pode ser menor que a taxa padrão).
   final double kgCharged;
+  /// Taxa calculada pela regra geral, antes de desconto combinado.
+  final double? standardKg;
+  /// Motivo do ajuste (indicação, produtor novo, mimo…).
+  final String? adjustmentNote;
   FeeChargeStatus status;
   DateTime? chargedAt;
+
+  bool get isPersonalized =>
+      standardKg != null && (standardKg! - kgCharged).abs() > 0.5;
 }
 
 /// Cotação de mercado para o letreiro do header (mock atualizado periodicamente).

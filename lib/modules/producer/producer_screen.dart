@@ -6,6 +6,7 @@ import '../../core/models/models.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/purchase_economy.dart';
 
 /// Módulo CADPRO — Cadastro do Produtor Rural, tipos de produção, produtos e grupos.
 class ProducerScreen extends StatefulWidget {
@@ -70,70 +71,31 @@ class _ProducerScreenState extends State<ProducerScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
-          title: 'Módulo CADPRO',
+          title: 'CADPRO',
           subtitle:
-              'Produtores · tipos · insumos · fornecedores · grupos',
-          action: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () {
-                  _tabs.animateTo(4);
-                  _openGroupDialog(context);
-                },
-                icon: const Icon(Icons.groups_outlined),
-                label: const Text('Novo grupo'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _tabs.animateTo(3);
-                  _openSupplierDialog(context);
-                },
-                icon: const Icon(Icons.handshake_outlined),
-                label: const Text('Novo fornecedor'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _tabs.animateTo(1);
-                  _openProductionTypeDialog(context);
-                },
-                icon: const Icon(Icons.category_outlined),
-                label: const Text('Novo tipo'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _tabs.animateTo(2);
-                  _openProductDialog(context);
-                },
-                icon: const Icon(Icons.inventory_2_outlined),
-                label: const Text('Novo produto'),
-              ),
-              FilledButton.icon(
-                onPressed: () {
-                  _tabs.animateTo(0);
-                  _openCadproDialog(context);
-                },
-                icon: const Icon(Icons.badge_outlined),
-                label: const Text('Novo CADPRO'),
-              ),
-            ],
+              'Documento de classe do produtor rural — como o CREA para o engenheiro. '
+              'CPF é a pessoa, CNPJ é a empresa; o CADPRO certifica que ele é produtor.',
+          action: FilledButton.icon(
+            onPressed: () {
+              _tabs.animateTo(0);
+              _openCadproDialog(context);
+            },
+            icon: const Icon(Icons.badge_outlined),
+            label: const Text('Novo CADPRO'),
           ),
         ),
         const SizedBox(height: 12),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: AppColors.forest.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.line),
           ),
           child: Text(
-            '1) Cadastre tipos e fornecedores. '
-            '2) No CADPRO reserve hectares por tipo. '
-            '3) Informe o Nº Identificador. A soma das reservas ≤ área total.',
+            'O Nº Identificador CADPRO é o registro que habilita o produtor na plataforma. '
+            'As abas ao lado (tipos, insumos, fornecedores, grupos) são o cadastro operacional da fazenda.',
             style: GoogleFonts.manrope(fontSize: 13, height: 1.4),
           ),
         ),
@@ -538,59 +500,118 @@ class _ProducerScreenState extends State<ProducerScreen>
 
   Future<void> _openProductDialog(BuildContext context) async {
     final name = TextEditingController();
-    final unit = TextEditingController(text: 'sc');
-    final category = TextEditingController(text: 'Insumo');
+    final unit = TextEditingController(text: 'L');
+    final price = TextEditingController(text: '0');
+    final dose = TextEditingController(text: '0');
+    var group = PurchaseGroup.herbicidas;
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          'Cadastrar produto',
-          style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
-        ),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Nome *'),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: Text(
+                'Cadastrar produto',
+                style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: unit,
-                decoration: const InputDecoration(labelText: 'Unidade *'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: name,
+                      decoration: const InputDecoration(labelText: 'Nome *'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: unit,
+                      decoration:
+                          const InputDecoration(labelText: 'Unidade *'),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<PurchaseGroup>(
+                      initialValue: group,
+                      decoration: const InputDecoration(
+                        labelText: 'Grupo de compra',
+                      ),
+                      items: [
+                        for (final g in PurchaseGroup.values)
+                          DropdownMenuItem(value: g, child: Text(g.label)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setLocal(() => group = v);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: price,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Preço ref. (R\$ / un.)',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: dose,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Dose típica / ha (opcional)',
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: category,
-                decoration: const InputDecoration(labelText: 'Categoria'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (name.text.trim().isEmpty || unit.text.trim().isEmpty) return;
-              final p = state.registerProduct(
-                name: name.text,
-                unit: unit.text,
-                category: category.text,
-              );
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Produto “${p.name}” cadastrado.')),
-              );
-            },
-            child: const Text('Salvar produto'),
-          ),
-        ],
-      ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (name.text.trim().isEmpty ||
+                        unit.text.trim().isEmpty) {
+                      return;
+                    }
+                    final p = state.registerProduct(
+                      name: name.text,
+                      unit: unit.text,
+                      purchaseGroup: group,
+                      refPriceReais: double.tryParse(
+                            price.text.replaceAll(',', '.'),
+                          ) ??
+                          0,
+                      dosePerHa: double.tryParse(
+                            dose.text.replaceAll(',', '.'),
+                          ) ??
+                          0,
+                    );
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '“${p.name}” no catálogo. Ainda não está no pool.',
+                        ),
+                        action: SnackBarAction(
+                          label: 'Incluir no pool',
+                          onPressed: () {
+                            showIncludeInPoolDialog(
+                              context,
+                              state: state,
+                              initialProductId: p.id,
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Salvar no catálogo'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1562,19 +1583,39 @@ class _ProductsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canPool = state.currentUser?.role.canManageEcosystem == true ||
+        state.currentUser?.role == UserRole.produtor;
+
     return ListView(
       children: [
+        const PoolHowToBanner(compact: true),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.inventory_2_outlined),
-            label: const Text('Cadastrar produto'),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: const Text('Cadastrar no catálogo'),
+              ),
+              if (canPool)
+                OutlinedButton.icon(
+                  onPressed: () => showIncludeInPoolDialog(
+                    context,
+                    state: state,
+                  ),
+                  icon: const Icon(Icons.add_shopping_cart_outlined),
+                  label: const Text('Incluir no pool'),
+                ),
+            ],
           ),
         ),
         const SizedBox(height: 14),
         if (state.products.isEmpty)
-          const EmptyHint(message: 'Nenhum produto cadastrado.')
+          const EmptyHint(message: 'Nenhum produto no catálogo.')
         else
           ...state.products.map((p) {
             return Padding(
@@ -1589,7 +1630,20 @@ class _ProductsTab extends StatelessWidget {
                   p.name,
                   style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text('${p.category} · ${p.unit}'),
+                subtitle: Text(
+                  '${p.purchaseGroup.shortLabel} · ${p.unit}'
+                  '${p.refPriceReais > 0 ? ' · R\$ ${p.refPriceReais.toStringAsFixed(2)}' : ''}',
+                ),
+                trailing: canPool
+                    ? TextButton(
+                        onPressed: () => showIncludeInPoolDialog(
+                          context,
+                          state: state,
+                          initialProductId: p.id,
+                        ),
+                        child: const Text('Incluir no pool'),
+                      )
+                    : null,
               ),
             );
           }),

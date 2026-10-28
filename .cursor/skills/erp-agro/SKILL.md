@@ -71,6 +71,12 @@ lib/modules/auth|shell|producer|purchases|logistics|network|stock|fees|reports
 3. **Logística terceirizada** — armazém de retaguarda + fracionamento + transportadoras
 4. **CADPRO + categorização** — cadastro do produtor rural; fazenda com **múltiplos focos** e **hectares reservados** por tipo; taxa 33 kg soja/ha/ano
 
+## Camada económica (roadmap da reunião)
+
+1. **Pool de compras** — grupos (fertilizante, herbicida, fungicida…) + indicadores **R\$/ha** + fases *negociação* / *compra realizada* (mock atual)
+2. **Gestão económica por cultura** — custo em sc/ha e travamento (prévia no mock via `CropEconomicsSnapshot`)
+3. **Rentabilidade / comercialização** — margem vs cotação, ponto de equilíbrio (prévia no mock)
+
 ## Referência detalhada
 
 - Documento completo: [reference.md](reference.md)

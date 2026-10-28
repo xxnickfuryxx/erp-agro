@@ -69,7 +69,7 @@ class _AppShellState extends State<AppShell> {
         return [
           ...common,
           _NavItem('CADPRO', Icons.badge_outlined, (s) => ProducerScreen(state: s)),
-          _NavItem('Lotes', Icons.layers_outlined, (s) => PurchasesScreen(state: s)),
+          _NavItem('Compras', Icons.shopping_bag_outlined, (s) => PurchasesScreen(state: s)),
           _NavItem('Logística', Icons.local_shipping_outlined, (s) => LogisticsScreen(state: s)),
           _NavItem('Rede', Icons.hub_outlined, (s) => TransfersScreen(state: s)),
           _NavItem('Stock', Icons.inventory_2_outlined, (s) => StockScreen(state: s)),

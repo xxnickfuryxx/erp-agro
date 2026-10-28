@@ -28,7 +28,8 @@ class FeesScreen extends StatelessWidget {
       children: [
         SectionHeader(
           title: 'Taxa de gestão',
-          subtitle: cfg.formulaLabel,
+          subtitle:
+              '${cfg.formulaLabel} · na cobrança o valor vem preenchido e pode ser ajustado',
           action: role.canManageEcosystem
               ? FilledButton.icon(
                   onPressed: () {
@@ -189,17 +190,7 @@ class FeesScreen extends StatelessWidget {
                           ),
                         ),
                         FilledButton(
-                          onPressed: () {
-                            final c =
-                                state.chargeManagementFee(producerId: p.id);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Cobrados ${c.kgCharged.toStringAsFixed(0)} kg · ${c.season}',
-                                ),
-                              ),
-                            );
-                          },
+                          onPressed: () => _confirmCharge(context, state, p),
                           child: const Text('Cobrar taxa'),
                         ),
                       ],
@@ -234,14 +225,16 @@ class FeesScreen extends StatelessWidget {
                   style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(
-                  '${f.season} · ${f.harvestMode.label} · ${f.hectares.toStringAsFixed(0)} ha',
+                  '${f.season} · ${f.harvestMode.label} · ${f.hectares.toStringAsFixed(0)} ha'
+                  '${f.isPersonalized ? ' · personalizada (padrão ${f.standardKg!.toStringAsFixed(0)} kg)' : ''}'
+                  '${f.adjustmentNote != null ? ' · ${f.adjustmentNote}' : ''}',
                   style: GoogleFonts.manrope(fontSize: 12),
                 ),
                 trailing: Text(
                   '${f.kgCharged.toStringAsFixed(0)} kg',
                   style: GoogleFonts.manrope(
                     fontWeight: FontWeight.w800,
-                    color: AppColors.forest,
+                    color: f.isPersonalized ? AppColors.gold : AppColors.forest,
                   ),
                 ),
               ),
@@ -250,6 +243,104 @@ class FeesScreen extends StatelessWidget {
       ],
     );
   }
+}
+
+Future<void> _confirmCharge(
+  BuildContext context,
+  AppState state,
+  Producer p,
+) async {
+  final standard = state.managementFeeFor(p);
+  final kgCtrl = TextEditingController(text: standard.toStringAsFixed(0));
+  final noteCtrl = TextEditingController();
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: Text(
+          'Cobrar taxa · ${p.farm}',
+          style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Valor da regra geral já preenchido '
+                '(${p.hectares.toStringAsFixed(0)} ha × ${state.feeConfig.kgPerHa.toStringAsFixed(0)} kg '
+                '× ${p.harvestMode.feeMultiplier.toStringAsFixed(0)}). '
+                'Confirme ou altere para uma taxa pré-acordada '
+                '(desconto, indicação, produtor novo).',
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: AppColors.muted,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: kgCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText:
+                      'Kg de ${state.feeConfig.commodityLabel} a cobrar',
+                  helperText:
+                      'Padrão: ${standard.toStringAsFixed(0)} kg. Pode reduzir.',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Motivo do ajuste (opcional)',
+                  hintText: 'Ex.: indicação, desconto de entrada',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirmar cobrança'),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (ok != true || !context.mounted) {
+    kgCtrl.dispose();
+    noteCtrl.dispose();
+    return;
+  }
+
+  final kg = double.tryParse(kgCtrl.text.replaceAll(',', '.')) ?? standard;
+  final charge = state.chargeManagementFee(
+    producerId: p.id,
+    kgOverride: kg < 0 ? standard : kg,
+    adjustmentNote: noteCtrl.text,
+  );
+  kgCtrl.dispose();
+  noteCtrl.dispose();
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        charge.isPersonalized
+            ? 'Taxa personalizada: ${charge.kgCharged.toStringAsFixed(0)} kg '
+                '(padrão ${charge.standardKg!.toStringAsFixed(0)}).'
+            : 'Cobrados ${charge.kgCharged.toStringAsFixed(0)} kg · ${charge.season}',
+      ),
+    ),
+  );
 }
 
 class _FeeConfigCard extends StatefulWidget {

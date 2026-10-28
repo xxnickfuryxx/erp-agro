@@ -6,208 +6,117 @@ import '../../core/models/models.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/purchase_economy.dart';
 
-class PurchasesScreen extends StatelessWidget {
+class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({super.key, required this.state});
 
   final AppState state;
 
   @override
+  State<PurchasesScreen> createState() => _PurchasesScreenState();
+}
+
+class _PurchasesScreenState extends State<PurchasesScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  AppState get state => widget.state;
+
+  bool get _isSupplierOnly {
+    final role = state.currentUser!.role;
+    return role.canActAsSupplier && !role.canManageEcosystem;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final role = state.currentUser!.role;
+    final len = _isSupplierOnly
+        ? 1
+        : role == UserRole.produtor
+            ? 2
+            : 2;
+    _tabs = TabController(length: len, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final role = state.currentUser!.role;
-    return ListView(
-      children: [
-        SectionHeader(
-          title: role.canActAsSupplier && !role.canManageEcosystem
-              ? 'Cotações e aprovação'
-              : role.canManageEcosystem
-                  ? 'Compras e lotes'
-                  : 'Compras bifurcadas',
-          subtitle:
-              'Planeada (lote único) vs Direta (JIT) — faturação fora do ERP',
-          action: role == UserRole.produtor
-              ? Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _openNeedDialog(context),
-                      icon: const Icon(Icons.calendar_month_outlined),
-                      label: const Text('Compra planeada'),
-                    ),
-                    FilledButton.icon(
-                      onPressed: () => _openDirectPurchaseDialog(context),
-                      icon: const Icon(Icons.flash_on),
-                      label: const Text('Compra direta'),
-                    ),
-                  ],
-                )
-              : null,
-        ),
-        if (role == UserRole.produtor) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.goldSoft.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
-            ),
-            child: Text(
-              'Compra direta: pedido imediato ao fornecedor, sem entrar no lote consolidado. '
-              'A entrega é feita por transportadora terceirizada.',
-              style: GoogleFonts.manrope(fontSize: 13, height: 1.4),
-            ),
-          ),
-        ],
-        const SizedBox(height: 16),
-        if (role == UserRole.produtor || role.canManageEcosystem) ...[
-          _NeedsPanel(state: state),
-          const SizedBox(height: 20),
-        ],
-        if (role == UserRole.produtor ||
-            role.canManageEcosystem ||
-            role.canActAsSupplier) ...[
-          _DirectOrdersPanel(state: state),
-          const SizedBox(height: 20),
-        ],
-        if (role.canManageEcosystem) ...[
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () {
-                    final lot = state.consolidateNextPlanned();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          lot == null
-                              ? 'Sem necessidades planeadas para consolidar.'
-                              : 'Lote ${lot.code} consolidado (${lot.productName}).',
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.merge_type),
-                  label: const Text('Consolidar próximo produto'),
-                ),
-                ...state.plannedProductIdsWithNeeds().map((pid) {
-                  final name =
-                      state.productById(pid)?.name ?? pid;
-                  return OutlinedButton(
-                    onPressed: () {
-                      final lot = state.consolidatePlanned(pid);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            lot == null
-                                ? 'Sem linhas para $name.'
-                                : 'Lote ${lot.code} consolidado.',
-                          ),
-                        ),
-                      );
-                    },
-                    child: Text('Consolidar $name'),
-                  );
-                }),
-              ],
-            ),
+    final producerId =
+        role == UserRole.produtor ? state.currentProducer?.id : null;
+
+    if (_isSupplierOnly) {
+      return ListView(
+        children: [
+          const SectionHeader(
+            title: 'Cotações',
+            subtitle: 'Lotes em cotação e aprovação',
           ),
           const SizedBox(height: 16),
-        ],
-        _LotsPanel(state: state),
-        if (role.canManageEcosystem || role.canActAsSupplier) ...[
+          _LotsPanel(state: state),
           const SizedBox(height: 20),
           _SettlementsPanel(state: state),
         ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'Compras',
+          subtitle: 'Pool de insumos → lote consolidado',
+          action: FilledButton.icon(
+            onPressed: () => showIncludeInPoolDialog(
+              context,
+              state: state,
+              initialProducerId: producerId,
+            ),
+            icon: const Icon(Icons.add_shopping_cart_outlined),
+            label: const Text('Incluir no pool'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        const PoolHowToBanner(),
+        const SizedBox(height: 8),
+        TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          labelColor: AppColors.forest,
+          unselectedLabelColor: AppColors.muted,
+          indicatorColor: AppColors.forest,
+          labelStyle: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+          tabs: [
+            const Tab(text: 'Pool'),
+            Tab(
+              text: role == UserRole.produtor ? 'Urgente' : 'Lotes',
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: [
+              _PoolTab(state: state, producerId: producerId),
+              if (role == UserRole.produtor)
+                _UrgentTab(
+                  state: state,
+                  onDirect: () => _openDirectPurchaseDialog(context),
+                )
+              else
+                _LotsTab(state: state),
+            ],
+          ),
+        ),
       ],
-    );
-  }
-
-  Future<void> _openNeedDialog(BuildContext context) async {
-    final producer = state.currentProducer;
-    if (producer == null) return;
-
-    String productId = 'ins-semente';
-    String productName = 'Semente de Soja';
-    String unit = 'sc';
-    final qtyCtrl = TextEditingController(text: '50');
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            return AlertDialog(
-              title: Text(
-                'Compra planeada (lote único)',
-                style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
-              ),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Esta necessidade entra na consolidação do ERP para cotação em volume.',
-                      style: GoogleFonts.manrope(
-                        fontSize: 12,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _ProductDropdown(
-                      products: state.products,
-                      productId: productId,
-                      onChanged: (id, name, u) {
-                        setLocal(() {
-                          productId = id;
-                          productName = name;
-                          unit = u;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration:
-                          InputDecoration(labelText: 'Quantidade ($unit)'),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final qty =
-                        double.tryParse(qtyCtrl.text.replaceAll(',', '.')) ?? 0;
-                    if (qty <= 0) return;
-                    state.addNeed(
-                      producerId: producer.id,
-                      productId: productId,
-                      productName: productName,
-                      quantity: qty,
-                      unit: unit,
-                      mode: PurchaseMode.planeada,
-                    );
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Enviar programação'),
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 
@@ -317,6 +226,134 @@ class PurchasesScreen extends StatelessWidget {
   }
 }
 
+class _PoolTab extends StatelessWidget {
+  const _PoolTab({required this.state, this.producerId});
+
+  final AppState state;
+  final String? producerId;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = state.currentUser!.role;
+    final ecoId = producerId ??
+        (state.producers.isNotEmpty ? state.producers.first.id : null);
+
+    return ListView(
+      padding: const EdgeInsets.only(top: 4, bottom: 24),
+      children: [
+        PurchasePoolPanel(
+          state: state,
+          producerId: producerId,
+          onIncludeInPool: () => showIncludeInPoolDialog(
+            context,
+            state: state,
+            initialProducerId: producerId,
+          ),
+        ),
+        if (role.canManageEcosystem) ...[
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonalIcon(
+              onPressed: () {
+                final lot = state.consolidateNextPlanned();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      lot == null
+                          ? 'Nada para consolidar. Inclua itens no pool primeiro.'
+                          : 'Lote ${lot.code} criado (${lot.productName}). Veja na aba Lotes.',
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.merge_type),
+              label: const Text('Consolidar pool em lote'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        _NeedsPanel(state: state),
+        if (ecoId != null) ...[
+          const SizedBox(height: 12),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(
+              'Economia da safra (opcional)',
+              style: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+            ),
+            children: [
+              CropEconomicsPanel(state: state, producerId: ecoId),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _LotsTab extends StatelessWidget {
+  const _LotsTab({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(top: 4, bottom: 24),
+      children: [
+        Text(
+          'Lotes consolidados do pool — cotação, aprovação e liquidação.',
+          style: GoogleFonts.manrope(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 12),
+        _LotsPanel(state: state),
+        const SizedBox(height: 20),
+        _SettlementsPanel(state: state),
+      ],
+    );
+  }
+}
+
+class _UrgentTab extends StatelessWidget {
+  const _UrgentTab({required this.state, required this.onDirect});
+
+  final AppState state;
+  final VoidCallback onDirect;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(top: 4, bottom: 24),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.goldSoft.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+          ),
+          child: Text(
+            'Compra urgente (JIT): fora do pool. Use só quando não puder esperar o lote.',
+            style: GoogleFonts.manrope(fontSize: 13, height: 1.4),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: onDirect,
+            icon: const Icon(Icons.flash_on),
+            label: const Text('Nova compra urgente'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _DirectOrdersPanel(state: state),
+      ],
+    );
+  }
+}
+
 class _ProductDropdown extends StatelessWidget {
   const _ProductDropdown({
     required this.products,
@@ -369,15 +406,21 @@ class _NeedsPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Necessidades enviadas',
+          'Itens no pool',
           style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 16),
         ),
         const SizedBox(height: 10),
         if (lines.isEmpty)
-          const EmptyHint(message: 'Nenhuma necessidade registada.')
+          const EmptyHint(
+            message: 'Vazio. Toque em “Incluir no pool” no topo.',
+          )
         else
           ...lines.map((n) {
             final farm = state.producerById(n.producerId)?.farm ?? n.producerId;
+            final group =
+                state.productById(n.productId)?.purchaseGroup.shortLabel ??
+                    'Insumo';
+            final rsHa = n.rsPerHa;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Container(
@@ -399,7 +442,10 @@ class _NeedsPanel extends StatelessWidget {
                                 GoogleFonts.manrope(fontWeight: FontWeight.w700),
                           ),
                           Text(
-                            '$farm · ${n.quantity.toStringAsFixed(0)} ${n.unit} · ${n.season}',
+                            '$farm · $group · ${n.quantity.toStringAsFixed(0)} ${n.unit}'
+                            '${n.unitPrice > 0 ? ' · R\$ ${n.unitPrice.toStringAsFixed(2)}/${n.unit}' : ''}'
+                            '${rsHa != null ? ' · R\$ ${rsHa.toStringAsFixed(0)}/ha' : ''}'
+                            ' · ${n.season}',
                             style: GoogleFonts.manrope(
                               fontSize: 12,
                               color: AppColors.muted,
@@ -408,13 +454,32 @@ class _NeedsPanel extends StatelessWidget {
                         ],
                       ),
                     ),
-                    StatusPill(
-                      label: n.mode == PurchaseMode.planeada
-                          ? 'Planeada'
-                          : 'Direta',
-                      tone: n.mode == PurchaseMode.planeada
-                          ? PillTone.info
-                          : PillTone.gold,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        StatusPill(
+                          label: n.mode == PurchaseMode.planeada
+                              ? 'Planeada'
+                              : 'Direta',
+                          tone: n.mode == PurchaseMode.planeada
+                              ? PillTone.info
+                              : PillTone.gold,
+                        ),
+                        StatusPill(
+                          label: n.phase.label,
+                          tone: n.phase == DealPhase.realizada
+                              ? PillTone.success
+                              : PillTone.warning,
+                        ),
+                        if (n.phase == DealPhase.negociacao &&
+                            role.canManageEcosystem)
+                          TextButton(
+                            onPressed: () => state.markNeedRealized(n.id),
+                            child: const Text('Marcar realizada'),
+                          ),
+                      ],
                     ),
                   ],
                 ),
