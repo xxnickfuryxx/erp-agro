@@ -22,7 +22,7 @@ class MarketQuotesTicker extends StatefulWidget {
 class _MarketQuotesTickerState extends State<MarketQuotesTicker>
     with SingleTickerProviderStateMixin {
   static const _refreshInterval = Duration(minutes: 10);
-  static const _scrollDuration = Duration(seconds: 40);
+  static const _scrollDuration = Duration(seconds: 110);
 
   late final AnimationController _scroll;
   Timer? _refreshTimer;

@@ -301,7 +301,7 @@ class MockData {
   static const users = [
     DemoUser(
       id: 'u0',
-      name: 'Tiago Admin',
+      name: 'Leonardo Admin',
       email: 'admin@erpagro.com',
       password: 'demo',
       role: UserRole.admin,

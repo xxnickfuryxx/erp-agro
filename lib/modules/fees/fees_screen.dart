@@ -32,7 +32,34 @@ class FeesScreen extends StatelessWidget {
               '${cfg.formulaLabel} · na cobrança o valor vem preenchido e pode ser ajustado',
           action: role.canManageEcosystem
               ? FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(
+                          'Cobrar todas as taxas?',
+                          style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        content: Text(
+                          'Vai aplicar a taxa padrão da regra geral em quem ainda não foi cobrado nesta safra. '
+                          'Para desconto ou taxa combinada, use “Cobrar taxa” em cada fazenda.',
+                          style: GoogleFonts.manrope(height: 1.4),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Confirmar'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true || !context.mounted) return;
                     final n = state.chargeAllManagementFees();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
